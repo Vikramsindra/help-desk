@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
+import connectToDB from "./src/config/DBConnection.js";
 
 dotenv.config();
 
@@ -18,4 +19,5 @@ app.get("/api/health", (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`Server is Running on ${PORT}`);
+    connectToDB();
 });
