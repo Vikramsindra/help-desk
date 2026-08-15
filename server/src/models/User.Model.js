@@ -19,6 +19,9 @@ const userSchema = mongoose.Schema({
         enum: ["user", "admin"],
         default: "user",
     },
+    refreshToken: {
+        type: String,
+    }
 }, { timestamps: true });
 
 const User = mongoose.model("user", userSchema);
