@@ -12,4 +12,33 @@ const loginSchema = Joi.object({
     password: Joi.string().required().min(6),
 })
 
-export { userSchema, loginSchema };
+const ticketSchema = Joi.object({
+    title: Joi.string()
+        .trim()
+        .required(),
+
+    description: Joi.string()
+        .trim()
+        .required(),
+
+    category: Joi.string()
+        .trim()
+        .required(),
+
+    priority: Joi.string()
+        .valid("low", "medium", "high")
+        .default("medium"),
+
+    status: Joi.string()
+        .valid("open", "in progress", "resolved", "closed")
+        .default("open"),
+
+    assignedTo: Joi.string()
+        .hex()
+        .length(24)
+        .allow(null)
+        .default(null)
+});
+
+
+export { userSchema, loginSchema, ticketSchema };

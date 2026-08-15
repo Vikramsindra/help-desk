@@ -3,9 +3,9 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import connectToDB from "./src/config/DBConnection.js";
-import User from "./src/models/User.Model.js";
 
 import UserRoute from "./src/routes/User.Route.js";
+import TicketRoute from "./src/routes/Ticket.Route.js";
 
 dotenv.config();
 
@@ -23,6 +23,7 @@ app.get("/api/health", async (req, res) => {
 });
 
 app.use("/api/user", UserRoute);
+app.use("/api/ticket", TicketRoute);
 
 app.listen(PORT, () => {
     console.log(`Server is Running on ${PORT}`);
