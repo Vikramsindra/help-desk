@@ -109,4 +109,90 @@ const loginController = async (req, res) => {
     }
 };
 
-export { registerController, loginController };
+
+const refreshController = async (req, res) => {
+    try {
+        // 1. Get refresh token from cookie
+        const refreshToken = req.cookies.refreshToken;
+
+        if (!refreshToken) {
+            return res.status(401).json({
+                message: "Refresh token required"
+            });
+        }
+
+        // 2. Verify refresh token
+        const decoded = jwt.verify(
+            refreshToken,
+            process.env.JWT_REFRESH_SECRET
+        );
+
+        // 3. Find user
+        const user = await User.findById(decoded.id);
+
+        if (!user) {
+            return res.status(401).json({
+                message: "User not found"
+            });
+        }
+
+        // 4. Check token stored in DB
+        if (user.refreshToken !== refreshToken) {
+            return res.status(401).json({
+                message: "Invalid refresh token"
+            });
+        }
+
+        // 5. Generate new tokens
+        const {
+            accessToken,
+            refreshToken: newRefreshToken
+        } = generateToken({
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role
+        });
+
+        // 6. Store new refresh token
+        user.refreshToken = newRefreshToken;
+
+        await user.save();
+
+        // 7. Set new refresh token cookie
+        res.cookie("refreshToken", newRefreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 7 * 24 * 60 * 60 * 1000
+        });
+
+        // 8. Send new access token
+        return res.status(200).json({
+            accessToken
+        });
+
+    } catch (error) {
+
+        if (error.name === "TokenExpiredError") {
+            return res.status(401).json({
+                message: "Refresh token expired. Please login again."
+            });
+        }
+
+        if (error.name === "JsonWebTokenError") {
+            return res.status(401).json({
+                message: "Invalid refresh token"
+            });
+        }
+
+        console.error(error);
+
+        return res.status(500).json({
+            message: "Internal server error"
+        });
+    }
+};
+
+
+export { registerController, loginController, refreshController };

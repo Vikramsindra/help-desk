@@ -56,4 +56,9 @@ const authMiddleware = (req, res, next) => {
     }
 };
 
+
+const checkAdminOrAgent = async (req, res, next) => {
+
+}
+
 export { authMiddleware };
