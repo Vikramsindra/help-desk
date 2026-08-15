@@ -1,4 +1,5 @@
 import express from "express";
+import { registerController } from "../controller/User.Controller.js"
 
 const router = express.Router();
 
@@ -7,10 +8,6 @@ router.get("/test", (req, res) => {
 });
 
 
-router.post("/register", (req, res) => {
-    const user = req.body;
-    console.log(user);
-    res.send("data sent");
-})
+router.post("/register", registerController);
 
 export default router;
