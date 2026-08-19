@@ -9,6 +9,7 @@ import {
   getAllTicketsController,
 } from "../controller/Ticket.Controller.js";
 import { allowRoles } from "../middlewares/role.Middleware.js";
+import CommentRoute from "./Comment.Route.js";
 
 const router = express.Router();
 
@@ -22,6 +23,9 @@ router.get(
 );
 
 router.get("/my-ticket", authMiddleware, getMyTicketsController);
+
+// Nested routes for comments
+router.use("/:ticketId/comments", CommentRoute);
 
 router.get("/:id", authMiddleware, getTicketDetailController);
 

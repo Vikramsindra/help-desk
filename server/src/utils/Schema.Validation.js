@@ -36,4 +36,14 @@ const updateTicketSchema = Joi.object({
   status: Joi.string().valid("open", "in progress", "resolved", "closed"),
 });
 
-export { userSchema, loginSchema, ticketSchema, updateTicketSchema };
+const commentSchema = Joi.object({
+  message: Joi.string().trim().required().min(1).max(5000),
+});
+
+export {
+  userSchema,
+  loginSchema,
+  ticketSchema,
+  updateTicketSchema,
+  commentSchema,
+};

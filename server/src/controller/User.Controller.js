@@ -9,7 +9,7 @@ const registerController = async (req, res) => {
     const data = req.body;
     const { error, value } = userSchema.validate(data);
     if (error) {
-      res.status(400).json({ error: error.details[0].message });
+      res.status(400).json({ message: error.details[0].message });
       return;
     }
 

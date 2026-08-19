@@ -6,6 +6,11 @@ import connectToDB from "./src/config/DBConnection.js";
 
 import UserRoute from "./src/routes/User.Route.js";
 import TicketRoute from "./src/routes/Ticket.Route.js";
+import CommentRoute from "./src/routes/Comment.Route.js";
+import {
+  errorMiddleware,
+  notFoundMiddleware,
+} from "./src/middlewares/error.Middleware.js";
 
 dotenv.config();
 
@@ -19,13 +24,17 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 app.get("/api/health", async (req, res) => {
-    res.status(200).json({ status: "ok", message: "API is healthy" });
+  res.status(200).json({ status: "ok", message: "API is healthy" });
 });
 
 app.use("/api/user", UserRoute);
 app.use("/api/ticket", TicketRoute);
+app.use("/api/tickets/:id/comments", CommentRoute);
+
+app.use(notFoundMiddleware);
+app.use(errorMiddleware);
 
 app.listen(PORT, () => {
-    console.log(`Server is Running on ${PORT}`);
-    connectToDB();
+  console.log(`Server is Running on ${PORT}`);
+  connectToDB();
 });
