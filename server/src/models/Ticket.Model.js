@@ -40,6 +40,12 @@ const ticketSchema = mongoose.Schema(
   { timestamps: true },
 );
 
+ticketSchema.index({ createdBy: 1 });
+ticketSchema.index({ assignedTo: 1 });
+ticketSchema.index({ status: 1 });
+ticketSchema.index({ priority: 1 });
+ticketSchema.index({ createdAt: -1 });
+
 const Ticket = mongoose.model("ticket", ticketSchema);
 
 export default Ticket;

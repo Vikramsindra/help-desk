@@ -1,8 +1,11 @@
 import Ticket from "../models/Ticket.Model.js";
+import User from "../models/User.Model.js";
 import mongoose from "mongoose";
 import {
   ticketSchema,
-  updateTicketSchema,
+  userTicketUpdateSchema,
+  agentTicketUpdateSchema,
+  adminTicketUpdateSchema,
 } from "../utils/Schema.Validation.js";
 
 const createTicket = async (req, res) => {
@@ -17,6 +20,8 @@ const createTicket = async (req, res) => {
     const ticket = new Ticket({
       ...value,
       createdBy: req.user.id,
+      status: "open",
+      assignedTo: null,
     });
 
     await ticket.save();
@@ -100,6 +105,13 @@ const getMyTicketsController = async (req, res) => {
   }
 };
 
+const getAssignedTicketsController = async (req, res) => {
+  const tickets = await Ticket.find({ assignedTo: req.user.id }).sort({
+    createdAt: -1,
+  });
+  return res.status(200).json({ tickets });
+};
+
 const getTicketDetailController = async (req, res) => {
   try {
     const { id } = req.params;
@@ -123,7 +135,7 @@ const getTicketDetailController = async (req, res) => {
       query.createdBy = req.user.id;
     } else if (req.user.role === "agent") {
       query.assignedTo = req.user.id;
-    } else if (req.user.role !== "admin") {
+    } else if (!["admin", "super_admin"].includes(req.user.role)) {
       return res.status(403).json({
         error: "Access forbidden",
       });
@@ -181,7 +193,7 @@ const deleteTicketController = async (req, res) => {
     }
 
     // Admin can delete any ticket
-    else if (req.user.role !== "admin") {
+    else if (!["admin", "super_admin"].includes(req.user.role)) {
       return res.status(403).json({
         error: "Access forbidden",
       });
@@ -232,14 +244,20 @@ const updateTicketController = async (req, res) => {
       query.createdBy = req.user.id;
     } else if (req.user.role === "agent") {
       query.assignedTo = req.user.id;
-    } else if (req.user.role !== "admin") {
+    } else if (!["admin", "super_admin"].includes(req.user.role)) {
       return res.status(403).json({
         error: "Access forbidden",
       });
     }
 
     // Validate request body
-    const { value, error } = updateTicketSchema.validate(req.body);
+    const schema =
+      req.user.role === "user"
+        ? userTicketUpdateSchema
+        : req.user.role === "agent"
+          ? agentTicketUpdateSchema
+          : adminTicketUpdateSchema;
+    const { value, error } = schema.validate(req.body);
 
     if (error) {
       return res.status(400).json({
@@ -278,11 +296,43 @@ const updateTicketController = async (req, res) => {
   }
 };
 
+const assignTicketController = async (req, res) => {
+  const { ticketId } = req.params;
+  const { assignedTo } = req.body;
+  if (
+    !mongoose.Types.ObjectId.isValid(ticketId) ||
+    !mongoose.Types.ObjectId.isValid(assignedTo || "")
+  ) {
+    return res.status(400).json({ message: "Invalid ticket or assignee ID" });
+  }
+
+  const [ticket, agent] = await Promise.all([
+    Ticket.findById(ticketId),
+    User.findOne({
+      _id: assignedTo,
+      role: "agent",
+    }),
+  ]);
+  if (!ticket || !agent)
+    return res.status(404).json({ message: "Ticket or assignee not found" });
+
+  const updatedTicket = await Ticket.findByIdAndUpdate(
+    ticketId,
+    { $set: { assignedTo: agent._id } },
+    { new: true, runValidators: true },
+  )
+    .populate("createdBy", "name email")
+    .populate("assignedTo", "name email");
+  return res.status(200).json({ ticket: updatedTicket });
+};
+
 export {
   createTicket,
   getAllTicketsController,
   getMyTicketsController,
+  getAssignedTicketsController,
   getTicketDetailController,
   deleteTicketController,
   updateTicketController,
+  assignTicketController,
 };

@@ -21,6 +21,8 @@ const commentSchema = mongoose.Schema(
   { timestamps: true },
 );
 
+commentSchema.index({ ticket: 1, createdAt: 1 });
+
 const Comment = mongoose.model("comment", commentSchema);
 
 export default Comment;

@@ -5,8 +5,8 @@ import cookieParser from "cookie-parser";
 import connectToDB from "./src/config/DBConnection.js";
 
 import UserRoute from "./src/routes/User.Route.js";
+import AdminRoute from "./src/routes/Admin.Route.js";
 import TicketRoute from "./src/routes/Ticket.Route.js";
-import CommentRoute from "./src/routes/Comment.Route.js";
 import {
   errorMiddleware,
   notFoundMiddleware,
@@ -18,7 +18,11 @@ const PORT = process.env.PORT || 8000;
 
 const app = express();
 
-app.use(cors());
+const allowedOrigins = (process.env.FRONTEND_ORIGINS || "http://localhost:5173")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -28,13 +32,21 @@ app.get("/api/health", async (req, res) => {
 });
 
 app.use("/api/user", UserRoute);
-app.use("/api/ticket", TicketRoute);
-app.use("/api/tickets/:id/comments", CommentRoute);
+app.use("/api/admin", AdminRoute);
+app.use("/api/tickets", TicketRoute);
 
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);
 
-app.listen(PORT, () => {
-  console.log(`Server is Running on ${PORT}`);
-  connectToDB();
-});
+export { app };
+
+if (process.env.NODE_ENV !== "test") {
+  connectToDB()
+    .then(() => {
+      app.listen(PORT, () => console.log(`Server is Running on ${PORT}`));
+    })
+    .catch(() => {
+      console.error("Database connection failed; server not started.");
+      process.exitCode = 1;
+    });
+}

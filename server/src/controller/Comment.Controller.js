@@ -3,6 +3,12 @@ import Ticket from "../models/Ticket.Model.js";
 import mongoose from "mongoose";
 import { commentSchema } from "../utils/Schema.Validation.js";
 
+const canAccessTicket = (ticket, user) => {
+  if (["admin", "super_admin"].includes(user.role)) return true;
+  if (user.role === "user") return ticket.createdBy.toString() === user.id;
+  return ticket.assignedTo?.toString() === user.id;
+};
+
 const createCommentController = async (req, res) => {
   try {
     const ticketId = req.params.ticketId || req.params.id;
@@ -28,6 +34,9 @@ const createCommentController = async (req, res) => {
         error: "Ticket not found",
       });
     }
+
+    if (!canAccessTicket(ticket, req.user))
+      return res.status(403).json({ error: "Access forbidden" });
 
     // Validate request body
     const { value, error } = commentSchema.validate(req.body);
@@ -89,6 +98,9 @@ const getTicketCommentsController = async (req, res) => {
       });
     }
 
+    if (!canAccessTicket(ticket, req.user))
+      return res.status(403).json({ error: "Access forbidden" });
+
     // Fetch all comments for the ticket
     const comments = await Comment.find({ ticket: ticketId })
       .populate("author", "name role")
@@ -146,7 +158,7 @@ const deleteCommentController = async (req, res) => {
     // Authorization: Only comment author or admin can delete
     if (
       comment.author.toString() !== req.user.id &&
-      req.user.role !== "admin"
+      !["admin", "super_admin"].includes(req.user.role)
     ) {
       return res.status(403).json({
         error: "You can only delete your own comments",

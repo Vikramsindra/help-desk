@@ -1,4 +1,23 @@
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
+
+const refreshCookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.COOKIE_SAME_SITE || "lax",
+  path: "/api/user",
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+});
+
+const hashRefreshToken = (token) =>
+  crypto.createHash("sha256").update(token).digest("hex");
+
+const sanitizeUser = (user) => ({
+  id: user._id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+});
 
 const generateToken = (data) => {
   const accessSecret = process.env.JWT_ACCESS_SECRET;
@@ -13,4 +32,4 @@ const generateToken = (data) => {
   return { accessToken, refreshToken };
 };
 
-export { generateToken };
+export { generateToken, hashRefreshToken, refreshCookieOptions, sanitizeUser };

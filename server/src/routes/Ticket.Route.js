@@ -7,6 +7,8 @@ import {
   getTicketDetailController,
   updateTicketController,
   getAllTicketsController,
+  getAssignedTicketsController,
+  assignTicketController,
 } from "../controller/Ticket.Controller.js";
 import { allowRoles } from "../middlewares/role.Middleware.js";
 import CommentRoute from "./Comment.Route.js";
@@ -18,11 +20,23 @@ router.post("/", authMiddleware, createTicket);
 router.get(
   "/admin",
   authMiddleware,
-  allowRoles("admin"),
+  allowRoles("admin", "super_admin"),
   getAllTicketsController,
 );
 
 router.get("/my-ticket", authMiddleware, getMyTicketsController);
+router.get(
+  "/assigned-to-me",
+  authMiddleware,
+  allowRoles("agent"),
+  getAssignedTicketsController,
+);
+router.patch(
+  "/:ticketId/assign",
+  authMiddleware,
+  allowRoles("admin", "super_admin"),
+  assignTicketController,
+);
 
 // Nested routes for comments
 router.use("/:ticketId/comments", CommentRoute);

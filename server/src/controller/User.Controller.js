@@ -1,13 +1,21 @@
 import User from "../models/User.Model.js";
 import argon2 from "argon2";
-import { loginSchema, userSchema } from "../utils/Schema.Validation.js";
-import { generateToken } from "../utils/utils.functions.js";
+import {
+  loginSchema,
+  staffSchema,
+  userSchema,
+} from "../utils/Schema.Validation.js";
+import {
+  generateToken,
+  hashRefreshToken,
+  refreshCookieOptions,
+  sanitizeUser,
+} from "../utils/utils.functions.js";
 import jwt from "jsonwebtoken";
 
 const registerController = async (req, res) => {
   try {
-    const data = req.body;
-    const { error, value } = userSchema.validate(data);
+    const { error, value } = userSchema.validate(req.body);
     if (error) {
       res.status(400).json({ message: error.details[0].message });
       return;
@@ -16,12 +24,13 @@ const registerController = async (req, res) => {
     const existingUser = await User.findOne({ email: value.email });
 
     if (existingUser) {
-      return res.status(400).json({ message: "user already exists" });
+      return res.status(409).json({ message: "user already exists" });
     }
 
     const hashedPassword = await argon2.hash(value.password);
     const newUser = new User({
       ...value,
+      role: "user",
       password: hashedPassword,
     });
 
@@ -32,20 +41,14 @@ const registerController = async (req, res) => {
       role: newUser.role,
     });
 
-    newUser.refreshToken = refreshToken;
+    newUser.refreshTokenHash = hashRefreshToken(refreshToken);
 
     await newUser.save();
 
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV == "production",
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie("refreshToken", refreshToken, refreshCookieOptions());
 
-    res.status(201).json({ accessToken });
+    res.status(201).json({ accessToken, user: sanitizeUser(newUser) });
   } catch (error) {
-    console.log(error);
     return res.status(500).json({
       message: "Internal server error",
     });
@@ -63,7 +66,9 @@ const loginController = async (req, res) => {
       return;
     }
 
-    const user = await User.findOne({ email: value.email });
+    const user = await User.findOne({ email: value.email }).select(
+      "+refreshTokenHash",
+    );
 
     if (!user) {
       return res.status(404).json({ error: "Invalid credentials" });
@@ -82,28 +87,17 @@ const loginController = async (req, res) => {
       role: user.role,
     });
 
-    user.refreshToken = refreshToken;
+    user.refreshTokenHash = hashRefreshToken(refreshToken);
 
     await user.save();
 
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV == "production",
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie("refreshToken", refreshToken, refreshCookieOptions());
 
     res.status(200).json({
       accessToken,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
+      user: sanitizeUser(user),
     });
   } catch (error) {
-    console.log(error);
     return res.status(500).json({
       message: "Internal server error",
     });
@@ -128,7 +122,7 @@ const refreshController = async (req, res) => {
     );
 
     // 3. Find user
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(decoded.id).select("+refreshTokenHash");
 
     if (!user) {
       return res.status(401).json({
@@ -137,7 +131,10 @@ const refreshController = async (req, res) => {
     }
 
     // 4. Check token stored in DB
-    if (user.refreshToken !== refreshToken) {
+    if (
+      !user.refreshTokenHash ||
+      hashRefreshToken(refreshToken) !== user.refreshTokenHash
+    ) {
       return res.status(401).json({
         message: "Invalid refresh token",
       });
@@ -152,17 +149,12 @@ const refreshController = async (req, res) => {
     });
 
     // 6. Store new refresh token
-    user.refreshToken = newRefreshToken;
+    user.refreshTokenHash = hashRefreshToken(newRefreshToken);
 
     await user.save();
 
     // 7. Set new refresh token cookie
-    res.cookie("refreshToken", newRefreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie("refreshToken", newRefreshToken, refreshCookieOptions());
 
     // 8. Send new access token
     return res.status(200).json({
@@ -181,12 +173,53 @@ const refreshController = async (req, res) => {
       });
     }
 
-    console.error(error);
-
     return res.status(500).json({
       message: "Internal server error",
     });
   }
 };
 
-export { registerController, loginController, refreshController };
+const createStaffController = async (req, res) => {
+  const { error, value } = staffSchema.validate(req.body);
+  if (error) return res.status(400).json({ message: error.details[0].message });
+
+  try {
+    const existingUser = await User.findOne({ email: value.email });
+    if (existingUser)
+      return res.status(409).json({ message: "user already exists" });
+
+    const user = await User.create({
+      name: value.name,
+      email: value.email,
+      password: await argon2.hash(value.password),
+      role: value.role,
+    });
+    return res.status(201).json({ user: sanitizeUser(user) });
+  } catch (error) {
+    if (error.code === 11000)
+      return res.status(409).json({ message: "user already exists" });
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+const logoutController = async (req, res) => {
+  const token = req.cookies.refreshToken;
+  if (token) {
+    await User.findOneAndUpdate(
+      { refreshTokenHash: hashRefreshToken(token) },
+      { $unset: { refreshTokenHash: 1 } },
+    );
+  }
+  return res
+    .clearCookie("refreshToken", refreshCookieOptions())
+    .status(204)
+    .send();
+};
+
+export {
+  registerController,
+  loginController,
+  refreshController,
+  createStaffController,
+  logoutController,
+};
