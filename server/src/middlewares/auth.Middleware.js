@@ -1,23 +1,30 @@
 import jwt from "jsonwebtoken";
+import ApiError from "../utils/ApiError.js";
 
+/**
+ * Authentication middleware.
+ * Verifies the Bearer access token in the Authorization header.
+ * Populates req.user with the decoded JWT payload on success.
+ * Delegates all error responses to the global error middleware via next(ApiError).
+ */
 const authMiddleware = (req, res, next) => {
   try {
     // 1. Get Authorization header
     const authHeader = req.headers.authorization;
 
     if (!authHeader) {
-      return res.status(401).json({
-        message: "Access token required",
-      });
+      return next(
+        new ApiError(401, "TOKEN_MISSING", "Access token required"),
+      );
     }
 
     // 2. Check Bearer format
     const parts = authHeader.split(" ");
 
     if (parts.length !== 2 || parts[0] !== "Bearer") {
-      return res.status(401).json({
-        message: "Invalid authorization format",
-      });
+      return next(
+        new ApiError(401, "TOKEN_INVALID_FORMAT", "Invalid authorization format"),
+      );
     }
 
     const token = parts[1];
@@ -35,22 +42,19 @@ const authMiddleware = (req, res, next) => {
     next();
   } catch (error) {
     if (error.name === "TokenExpiredError") {
-      return res.status(401).json({
-        message: "Access token expired",
-      });
+      return next(
+        new ApiError(401, "TOKEN_EXPIRED", "Access token expired"),
+      );
     }
 
     if (error.name === "JsonWebTokenError") {
-      return res.status(401).json({
-        message: "Invalid access token",
-      });
+      return next(
+        new ApiError(401, "TOKEN_INVALID", "Invalid access token"),
+      );
     }
 
-    console.error(error);
-
-    return res.status(500).json({
-      message: "Internal server error",
-    });
+    // Unexpected error — let global handler deal with it
+    next(error);
   }
 };
 

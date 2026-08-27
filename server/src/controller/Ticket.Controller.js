@@ -7,14 +7,19 @@ import {
   agentTicketUpdateSchema,
   adminTicketUpdateSchema,
 } from "../utils/Schema.Validation.js";
+import ApiResponse from "../utils/ApiResponse.js";
+import ApiError from "../utils/ApiError.js";
 
-const createTicket = async (req, res) => {
+// ─── Create ──────────────────────────────────────────────────────────────────
+
+const createTicket = async (req, res, next) => {
   try {
     const { value, error } = ticketSchema.validate(req.body);
 
     if (error) {
-      res.status(400).json({ message: error.details[0].message });
-      return;
+      return next(
+        new ApiError(400, "VALIDATION_ERROR", error.details[0].message, error.details),
+      );
     }
 
     const ticket = new Ticket({
@@ -26,24 +31,20 @@ const createTicket = async (req, res) => {
 
     await ticket.save();
 
-    return res.status(201).json({
-      message: "Ticket created successfully",
-      ticket,
-    });
+    return res.status(201).json(
+      new ApiResponse(ticket, "Ticket created successfully"),
+    );
   } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      message: "Internal server error",
-    });
+    next(error);
   }
 };
 
-const getAllTicketsController = async (req, res) => {
+// ─── List (admin) ─────────────────────────────────────────────────────────────
+
+const getAllTicketsController = async (req, res, next) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
-
     const skip = (page - 1) * limit;
 
     const filter = {};
@@ -58,75 +59,90 @@ const getAllTicketsController = async (req, res) => {
       filter.priority = req.query.priority;
     }
 
-    const tickets = await Ticket.find(filter)
-      .populate("createdBy", "name email")
-      .populate("assignedTo", "name email")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
+    const [tickets, totalItems] = await Promise.all([
+      Ticket.find(filter)
+        .populate("createdBy", "name email")
+        .populate("assignedTo", "name email")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Ticket.countDocuments(filter),
+    ]);
 
-    const totalTickets = await Ticket.countDocuments(filter);
+    const totalPages = Math.ceil(totalItems / limit);
 
-    return res.status(200).json({
-      tickets,
-      pagination: {
-        page,
-        limit,
-        totalTickets,
-        totalPages: Math.ceil(totalTickets / limit),
-      },
-    });
+    return res.status(200).json(
+      new ApiResponse(
+        {
+          items: tickets,
+          pagination: {
+            page,
+            limit,
+            totalItems,
+            totalPages,
+            hasNextPage: page < totalPages,
+            hasPreviousPage: page > 1,
+          },
+        },
+        "Tickets fetched successfully",
+      ),
+    );
   } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      message: "Internal server error",
-    });
+    next(error);
   }
 };
 
-const getMyTicketsController = async (req, res) => {
+// ─── My tickets ───────────────────────────────────────────────────────────────
+
+const getMyTicketsController = async (req, res, next) => {
   try {
-    const tickets = await Ticket.find({
-      createdBy: req.user.id,
-    })
+    const tickets = await Ticket.find({ createdBy: req.user.id })
       .populate("assignedTo", "name email")
       .sort({ createdAt: -1 });
 
-    return res.status(200).json({
-      tickets,
-    });
+    return res.status(200).json(
+      new ApiResponse(
+        { items: tickets },
+        "My tickets fetched successfully",
+      ),
+    );
   } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      message: "Internal server error",
-    });
+    next(error);
   }
 };
 
-const getAssignedTicketsController = async (req, res) => {
-  const tickets = await Ticket.find({ assignedTo: req.user.id }).sort({
-    createdAt: -1,
-  });
-  return res.status(200).json({ tickets });
+// ─── Assigned tickets ─────────────────────────────────────────────────────────
+
+const getAssignedTicketsController = async (req, res, next) => {
+  try {
+    const tickets = await Ticket.find({ assignedTo: req.user.id }).sort({
+      createdAt: -1,
+    });
+
+    return res.status(200).json(
+      new ApiResponse(
+        { items: tickets },
+        "Assigned tickets fetched successfully",
+      ),
+    );
+  } catch (error) {
+    next(error);
+  }
 };
 
-const getTicketDetailController = async (req, res) => {
+// ─── Ticket detail ────────────────────────────────────────────────────────────
+
+const getTicketDetailController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json({
-        error: "Ticket ID is required",
-      });
+      return next(new ApiError(400, "TICKET_ID_REQUIRED", "Ticket ID is required"));
     }
 
     // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        error: "Invalid ticket ID format",
-      });
+      return next(new ApiError(400, "INVALID_TICKET_ID", "Invalid ticket ID format"));
     }
 
     let query = { _id: id };
@@ -136,9 +152,7 @@ const getTicketDetailController = async (req, res) => {
     } else if (req.user.role === "agent") {
       query.assignedTo = req.user.id;
     } else if (!["admin", "super_admin"].includes(req.user.role)) {
-      return res.status(403).json({
-        error: "Access forbidden",
-      });
+      return next(new ApiError(403, "ACCESS_DENIED", "Access forbidden"));
     }
 
     const ticket = await Ticket.findOne(query)
@@ -146,36 +160,32 @@ const getTicketDetailController = async (req, res) => {
       .populate("assignedTo", "name email");
 
     if (!ticket) {
-      return res.status(404).json({
-        error: "Ticket not found or access denied",
-      });
+      return next(
+        new ApiError(404, "TICKET_NOT_FOUND", "Ticket not found or access denied"),
+      );
     }
 
-    return res.status(200).json(ticket);
+    return res.status(200).json(
+      new ApiResponse(ticket, "Ticket fetched successfully"),
+    );
   } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      message: "Internal server error",
-    });
+    next(error);
   }
 };
 
-const deleteTicketController = async (req, res) => {
+// ─── Delete ───────────────────────────────────────────────────────────────────
+
+const deleteTicketController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json({
-        error: "Ticket ID is required",
-      });
+      return next(new ApiError(400, "TICKET_ID_REQUIRED", "Ticket ID is required"));
     }
 
     // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        error: "Invalid ticket ID format",
-      });
+      return next(new ApiError(400, "INVALID_TICKET_ID", "Invalid ticket ID format"));
     }
 
     let query = { _id: id };
@@ -187,54 +197,45 @@ const deleteTicketController = async (req, res) => {
 
     // Agent is not allowed to delete
     else if (req.user.role === "agent") {
-      return res.status(403).json({
-        error: "Agents are not allowed to delete tickets",
-      });
+      return next(
+        new ApiError(403, "AGENT_DELETE_FORBIDDEN", "Agents are not allowed to delete tickets"),
+      );
     }
 
     // Admin can delete any ticket
     else if (!["admin", "super_admin"].includes(req.user.role)) {
-      return res.status(403).json({
-        error: "Access forbidden",
-      });
+      return next(new ApiError(403, "ACCESS_DENIED", "Access forbidden"));
     }
 
     const ticket = await Ticket.findOneAndDelete(query);
 
     if (!ticket) {
-      return res.status(404).json({
-        error: "Ticket not found or access denied",
-      });
+      return next(
+        new ApiError(404, "TICKET_NOT_FOUND", "Ticket not found or access denied"),
+      );
     }
 
-    return res.status(200).json({
-      message: "Ticket deleted successfully",
-      ticketId: ticket._id,
-    });
+    return res.status(200).json(
+      new ApiResponse({ ticketId: ticket._id }, "Ticket deleted successfully"),
+    );
   } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      message: "Internal server error",
-    });
+    next(error);
   }
 };
 
-const updateTicketController = async (req, res) => {
+// ─── Update ───────────────────────────────────────────────────────────────────
+
+const updateTicketController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json({
-        error: "Ticket ID is required",
-      });
+      return next(new ApiError(400, "TICKET_ID_REQUIRED", "Ticket ID is required"));
     }
 
     // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        error: "Invalid ticket ID format",
-      });
+      return next(new ApiError(400, "INVALID_TICKET_ID", "Invalid ticket ID format"));
     }
 
     // Build query based on role
@@ -245,9 +246,7 @@ const updateTicketController = async (req, res) => {
     } else if (req.user.role === "agent") {
       query.assignedTo = req.user.id;
     } else if (!["admin", "super_admin"].includes(req.user.role)) {
-      return res.status(403).json({
-        error: "Access forbidden",
-      });
+      return next(new ApiError(403, "ACCESS_DENIED", "Access forbidden"));
     }
 
     // Validate request body
@@ -257,73 +256,81 @@ const updateTicketController = async (req, res) => {
         : req.user.role === "agent"
           ? agentTicketUpdateSchema
           : adminTicketUpdateSchema;
+
     const { value, error } = schema.validate(req.body);
 
     if (error) {
-      return res.status(400).json({
-        error: error.details[0].message,
-      });
+      return next(
+        new ApiError(400, "VALIDATION_ERROR", error.details[0].message, error.details),
+      );
     }
 
     // Update ticket
     const ticket = await Ticket.findOneAndUpdate(
       query,
       { $set: value },
-      {
-        new: true,
-        runValidators: true,
-      },
+      { new: true, runValidators: true },
     )
       .populate("createdBy", "name email")
       .populate("assignedTo", "name email");
 
     if (!ticket) {
-      return res.status(404).json({
-        error: "Ticket not found or access denied",
-      });
+      return next(
+        new ApiError(404, "TICKET_NOT_FOUND", "Ticket not found or access denied"),
+      );
     }
 
-    return res.status(200).json({
-      message: "Ticket updated successfully",
-      ticket,
-    });
+    return res.status(200).json(
+      new ApiResponse(ticket, "Ticket updated successfully"),
+    );
   } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      message: "Internal server error",
-    });
+    next(error);
   }
 };
 
-const assignTicketController = async (req, res) => {
-  const { ticketId } = req.params;
-  const { assignedTo } = req.body;
-  if (
-    !mongoose.Types.ObjectId.isValid(ticketId) ||
-    !mongoose.Types.ObjectId.isValid(assignedTo || "")
-  ) {
-    return res.status(400).json({ message: "Invalid ticket or assignee ID" });
+// ─── Assign ───────────────────────────────────────────────────────────────────
+
+const assignTicketController = async (req, res, next) => {
+  try {
+    const { ticketId } = req.params;
+    const { assignedTo } = req.body;
+
+    if (
+      !mongoose.Types.ObjectId.isValid(ticketId) ||
+      !mongoose.Types.ObjectId.isValid(assignedTo || "")
+    ) {
+      return next(
+        new ApiError(400, "INVALID_ID", "Invalid ticket or assignee ID"),
+      );
+    }
+
+    const [ticket, agent] = await Promise.all([
+      Ticket.findById(ticketId),
+      User.findOne({ _id: assignedTo, role: "agent" }),
+    ]);
+
+    if (!ticket) {
+      return next(new ApiError(404, "TICKET_NOT_FOUND", "Ticket not found"));
+    }
+
+    if (!agent) {
+      return next(new ApiError(404, "AGENT_NOT_FOUND", "Assignee not found or is not an agent"));
+    }
+
+    const updatedTicket = await Ticket.findByIdAndUpdate(
+      ticketId,
+      { $set: { assignedTo: agent._id } },
+      { new: true, runValidators: true },
+    )
+      .populate("createdBy", "name email")
+      .populate("assignedTo", "name email");
+
+    return res.status(200).json(
+      new ApiResponse(updatedTicket, "Ticket assigned successfully"),
+    );
+  } catch (error) {
+    next(error);
   }
-
-  const [ticket, agent] = await Promise.all([
-    Ticket.findById(ticketId),
-    User.findOne({
-      _id: assignedTo,
-      role: "agent",
-    }),
-  ]);
-  if (!ticket || !agent)
-    return res.status(404).json({ message: "Ticket or assignee not found" });
-
-  const updatedTicket = await Ticket.findByIdAndUpdate(
-    ticketId,
-    { $set: { assignedTo: agent._id } },
-    { new: true, runValidators: true },
-  )
-    .populate("createdBy", "name email")
-    .populate("assignedTo", "name email");
-  return res.status(200).json({ ticket: updatedTicket });
 };
 
 export {

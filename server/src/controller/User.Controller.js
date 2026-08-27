@@ -12,19 +12,24 @@ import {
   sanitizeUser,
 } from "../utils/utils.functions.js";
 import jwt from "jsonwebtoken";
+import ApiResponse from "../utils/ApiResponse.js";
+import ApiError from "../utils/ApiError.js";
 
-const registerController = async (req, res) => {
+// ─── Register ─────────────────────────────────────────────────────────────────
+
+const registerController = async (req, res, next) => {
   try {
     const { error, value } = userSchema.validate(req.body);
     if (error) {
-      res.status(400).json({ message: error.details[0].message });
-      return;
+      return next(
+        new ApiError(400, "VALIDATION_ERROR", error.details[0].message, error.details),
+      );
     }
 
     const existingUser = await User.findOne({ email: value.email });
 
     if (existingUser) {
-      return res.status(409).json({ message: "user already exists" });
+      return next(new ApiError(409, "USER_ALREADY_EXISTS", "User already exists"));
     }
 
     const hashedPassword = await argon2.hash(value.password);
@@ -47,23 +52,27 @@ const registerController = async (req, res) => {
 
     res.cookie("refreshToken", refreshToken, refreshCookieOptions());
 
-    res.status(201).json({ accessToken, user: sanitizeUser(newUser) });
+    return res.status(201).json(
+      new ApiResponse(
+        { accessToken, user: sanitizeUser(newUser) },
+        "Registration successful",
+      ),
+    );
   } catch (error) {
-    return res.status(500).json({
-      message: "Internal server error",
-    });
+    next(error);
   }
 };
 
-const loginController = async (req, res) => {
-  try {
-    const data = req.body;
+// ─── Login ────────────────────────────────────────────────────────────────────
 
-    const { value, error } = loginSchema.validate(data);
+const loginController = async (req, res, next) => {
+  try {
+    const { value, error } = loginSchema.validate(req.body);
 
     if (error) {
-      res.status(400).json({ error: error.details[0].message });
-      return;
+      return next(
+        new ApiError(400, "VALIDATION_ERROR", error.details[0].message, error.details),
+      );
     }
 
     const user = await User.findOne({ email: value.email }).select(
@@ -71,13 +80,13 @@ const loginController = async (req, res) => {
     );
 
     if (!user) {
-      return res.status(404).json({ error: "Invalid credentials" });
+      return next(new ApiError(401, "INVALID_CREDENTIALS", "Invalid credentials"));
     }
 
     const isMatch = await argon2.verify(user.password, value.password);
 
     if (!isMatch) {
-      return res.status(401).json({ error: "Invalid credentials" });
+      return next(new ApiError(401, "INVALID_CREDENTIALS", "Invalid credentials"));
     }
 
     const { accessToken, refreshToken } = generateToken({
@@ -93,41 +102,53 @@ const loginController = async (req, res) => {
 
     res.cookie("refreshToken", refreshToken, refreshCookieOptions());
 
-    res.status(200).json({
-      accessToken,
-      user: sanitizeUser(user),
-    });
+    return res.status(200).json(
+      new ApiResponse(
+        { accessToken, user: sanitizeUser(user) },
+        "Login successful",
+      ),
+    );
   } catch (error) {
-    return res.status(500).json({
-      message: "Internal server error",
-    });
+    next(error);
   }
 };
 
-const refreshController = async (req, res) => {
+// ─── Refresh ──────────────────────────────────────────────────────────────────
+
+const refreshController = async (req, res, next) => {
   try {
     // 1. Get refresh token from cookie
     const refreshToken = req.cookies.refreshToken;
 
     if (!refreshToken) {
-      return res.status(401).json({
-        message: "Refresh token required",
-      });
+      return next(
+        new ApiError(401, "REFRESH_TOKEN_MISSING", "Refresh token required"),
+      );
     }
 
     // 2. Verify refresh token
-    const decoded = jwt.verify(
-      refreshToken,
-      process.env.JWT_REFRESH_SECRET || process.env.REFRESH_SECRET,
-    );
+    let decoded;
+    try {
+      decoded = jwt.verify(
+        refreshToken,
+        process.env.JWT_REFRESH_SECRET || process.env.REFRESH_SECRET,
+      );
+    } catch (jwtError) {
+      if (jwtError.name === "TokenExpiredError") {
+        return next(
+          new ApiError(401, "REFRESH_TOKEN_EXPIRED", "Refresh token expired. Please login again."),
+        );
+      }
+      return next(
+        new ApiError(401, "REFRESH_TOKEN_INVALID", "Invalid refresh token"),
+      );
+    }
 
     // 3. Find user
     const user = await User.findById(decoded.id).select("+refreshTokenHash");
 
     if (!user) {
-      return res.status(401).json({
-        message: "User not found",
-      });
+      return next(new ApiError(401, "USER_NOT_FOUND", "User not found"));
     }
 
     // 4. Check token stored in DB
@@ -135,9 +156,9 @@ const refreshController = async (req, res) => {
       !user.refreshTokenHash ||
       hashRefreshToken(refreshToken) !== user.refreshTokenHash
     ) {
-      return res.status(401).json({
-        message: "Invalid refresh token",
-      });
+      return next(
+        new ApiError(401, "REFRESH_TOKEN_INVALID", "Invalid refresh token"),
+      );
     }
 
     // 5. Generate new tokens
@@ -157,36 +178,29 @@ const refreshController = async (req, res) => {
     res.cookie("refreshToken", newRefreshToken, refreshCookieOptions());
 
     // 8. Send new access token
-    return res.status(200).json({
-      accessToken,
-    });
+    return res.status(200).json(
+      new ApiResponse({ accessToken }, "Token refreshed successfully"),
+    );
   } catch (error) {
-    if (error.name === "TokenExpiredError") {
-      return res.status(401).json({
-        message: "Refresh token expired. Please login again.",
-      });
-    }
-
-    if (error.name === "JsonWebTokenError") {
-      return res.status(401).json({
-        message: "Invalid refresh token",
-      });
-    }
-
-    return res.status(500).json({
-      message: "Internal server error",
-    });
+    next(error);
   }
 };
 
-const createStaffController = async (req, res) => {
-  const { error, value } = staffSchema.validate(req.body);
-  if (error) return res.status(400).json({ message: error.details[0].message });
+// ─── Create staff ─────────────────────────────────────────────────────────────
 
+const createStaffController = async (req, res, next) => {
   try {
+    const { error, value } = staffSchema.validate(req.body);
+    if (error) {
+      return next(
+        new ApiError(400, "VALIDATION_ERROR", error.details[0].message, error.details),
+      );
+    }
+
     const existingUser = await User.findOne({ email: value.email });
-    if (existingUser)
-      return res.status(409).json({ message: "user already exists" });
+    if (existingUser) {
+      return next(new ApiError(409, "USER_ALREADY_EXISTS", "User already exists"));
+    }
 
     const user = await User.create({
       name: value.name,
@@ -194,26 +208,39 @@ const createStaffController = async (req, res) => {
       password: await argon2.hash(value.password),
       role: value.role,
     });
-    return res.status(201).json({ user: sanitizeUser(user) });
+
+    return res.status(201).json(
+      new ApiResponse(sanitizeUser(user), "Staff user created successfully"),
+    );
   } catch (error) {
-    if (error.code === 11000)
-      return res.status(409).json({ message: "user already exists" });
-    return res.status(500).json({ message: "Internal server error" });
+    if (error.code === 11000) {
+      return next(new ApiError(409, "USER_ALREADY_EXISTS", "User already exists"));
+    }
+    next(error);
   }
 };
 
-const logoutController = async (req, res) => {
-  const token = req.cookies.refreshToken;
-  if (token) {
-    await User.findOneAndUpdate(
-      { refreshTokenHash: hashRefreshToken(token) },
-      { $unset: { refreshTokenHash: 1 } },
-    );
+// ─── Logout ───────────────────────────────────────────────────────────────────
+//
+// DOCUMENTED EXCEPTION: HTTP 204 No Content must not have a response body.
+// ApiResponse is intentionally NOT used here.
+
+const logoutController = async (req, res, next) => {
+  try {
+    const token = req.cookies.refreshToken;
+    if (token) {
+      await User.findOneAndUpdate(
+        { refreshTokenHash: hashRefreshToken(token) },
+        { $unset: { refreshTokenHash: 1 } },
+      );
+    }
+    return res
+      .clearCookie("refreshToken", refreshCookieOptions())
+      .status(204)
+      .send();
+  } catch (error) {
+    next(error);
   }
-  return res
-    .clearCookie("refreshToken", refreshCookieOptions())
-    .status(204)
-    .send();
 };
 
 export {
