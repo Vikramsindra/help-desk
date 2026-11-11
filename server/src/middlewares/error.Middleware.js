@@ -35,12 +35,13 @@ const notFoundMiddleware = (req, res, next) => {
  *   }
  */
 const errorMiddleware = (error, req, res, next) => {
-  console.error("API request failed", {
-    method: req.method,
-    path: req.path,
-    statusCode: error.statusCode || error.status || 500,
-    code: error.code || "INTERNAL_ERROR",
-  });
+  if (!error.isOperational && process.env.NODE_ENV !== "test") {
+    console.error("Unhandled API request failure", {
+      method: req.method,
+      path: req.path,
+      statusCode: error.statusCode || error.status || 500,
+    });
+  }
 
   if (error.type === "entity.too.large") {
     return res.status(413).json({

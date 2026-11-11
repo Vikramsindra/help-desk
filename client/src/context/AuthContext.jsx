@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { AuthContext } from "./AuthContextValue";
 import {
+  hasStoredSession,
   setAccessToken,
   clearAccessToken,
   setAuthFailureHandler,
@@ -10,7 +11,7 @@ import toast from "react-hot-toast";
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => hasStoredSession());
 
   const handleAuthFailure = useCallback(() => {
     clearAccessToken();
@@ -26,6 +27,12 @@ export function AuthProvider({ children }) {
   // Try to restore session on mount via refresh token
   useEffect(() => {
     let active = true;
+
+    if (!hasStoredSession()) {
+      return () => {
+        active = false;
+      };
+    }
 
     (async () => {
       try {

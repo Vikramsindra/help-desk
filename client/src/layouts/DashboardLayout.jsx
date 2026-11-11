@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Outlet } from "react-router";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/navigation/Sidebar";
+import Footer from "../components/layout/Footer";
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -22,6 +23,7 @@ export default function DashboardLayout() {
           <Outlet />
         </main>
       </div>
+      <Footer />
     </div>
   );
 }

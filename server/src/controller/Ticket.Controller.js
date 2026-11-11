@@ -444,7 +444,7 @@ const updateTicketController = async (req, res, next) => {
     const ticket = await Ticket.findOneAndUpdate(
       query,
       { $set: value },
-      { new: true, runValidators: true },
+      { returnDocument: "after", runValidators: true },
     )
       .populate("createdBy", "name email")
       .populate("assignedTo", "name email");
@@ -532,7 +532,7 @@ const assignTicketController = async (req, res, next) => {
     const updatedTicket = await Ticket.findByIdAndUpdate(
       ticketId,
       { $set: { assignedTo: agent._id, assignedAt: new Date() } },
-      { new: true, runValidators: true },
+      { returnDocument: "after", runValidators: true },
     )
       .populate("createdBy", "name email")
       .populate("assignedTo", "name email");

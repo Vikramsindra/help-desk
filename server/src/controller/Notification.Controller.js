@@ -61,7 +61,7 @@ const markNotificationReadController = async (req, res, next) => {
     const notification = await Notification.findOneAndUpdate(
       { _id: notificationId, user: req.user.id },
       { $set: { isRead: true } },
-      { new: true, runValidators: true },
+      { returnDocument: "after", runValidators: true },
     ).populate("ticket", "title status");
 
     if (!notification) {

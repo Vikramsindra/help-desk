@@ -33,8 +33,10 @@ const createNotifications = async ({
         notification.toObject(),
       );
     });
-  } catch {
-    console.error("Notification dispatch failed");
+  } catch (error) {
+    if (process.env.NODE_ENV !== "test") {
+      console.error("Notification dispatch failed", error);
+    }
   }
 };
 

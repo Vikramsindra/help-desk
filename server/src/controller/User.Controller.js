@@ -573,7 +573,7 @@ const updateCustomerController = async (req, res, next) => {
     const customer = await User.findOneAndUpdate(
       { _id: customerId, role: "user" },
       update,
-      { new: true, runValidators: true },
+      { returnDocument: "after", runValidators: true },
     ).select("name email role isActive createdAt updatedAt");
 
     if (!customer) {
@@ -657,7 +657,7 @@ const updateStaffController = async (req, res, next) => {
     const user = await User.findOneAndUpdate(
       { _id: staffId, role: { $in: ["agent", "admin"] } },
       update,
-      { new: true, runValidators: true },
+      { returnDocument: "after", runValidators: true },
     ).select("name email role isActive createdAt updatedAt");
 
     if (!user) {

@@ -1,5 +1,6 @@
 import { LifeBuoy } from "lucide-react";
 import { Link, Outlet } from "react-router";
+import Footer from "../components/layout/Footer";
 
 export default function PublicLayout() {
   return (
@@ -35,6 +36,7 @@ export default function PublicLayout() {
         </div>
       </header>
       <Outlet />
+      <Footer />
     </div>
   );
 }

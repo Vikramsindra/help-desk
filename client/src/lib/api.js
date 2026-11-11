@@ -3,18 +3,46 @@ const API_BASE = (import.meta.env.VITE_API_BASE_URL || "/api").replace(
   "",
 );
 
+const SESSION_MARKER_STORAGE_KEY = "helpdesk_session_active";
+
+export const hasStoredSession = () => {
+  if (typeof window === "undefined") return false;
+
+  try {
+    return window.localStorage.getItem(SESSION_MARKER_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+
+const persistSessionMarker = (isActive) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    if (isActive) {
+      window.localStorage.setItem(SESSION_MARKER_STORAGE_KEY, "1");
+    } else {
+      window.localStorage.removeItem(SESSION_MARKER_STORAGE_KEY);
+    }
+  } catch {
+    // Storage may be unavailable in private browsing or restricted modes.
+  }
+};
+
 let accessToken = null;
 let refreshPromise = null;
 let authFailureHandler = null;
 
 export const setAccessToken = (token) => {
   accessToken = token;
+  persistSessionMarker(!!token);
 };
 
 export const getAccessToken = () => accessToken;
 
 export const clearAccessToken = () => {
   accessToken = null;
+  persistSessionMarker(false);
 };
 
 export const setAuthFailureHandler = (handler) => {

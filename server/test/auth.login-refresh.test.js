@@ -213,3 +213,18 @@ describe("GET /api/user/me", () => {
     assertErrorShape(res.body);
   });
 });
+
+describe("User model indexing", () => {
+  it("keeps a single unique email index", async () => {
+    const User = (await import("../src/models/User.Model.js")).default;
+
+    const uniqueEmailIndexes = User.schema
+      .indexes()
+      .filter(
+        ([fields, options]) =>
+          options?.unique === true && Object.keys(fields).includes("email"),
+      );
+
+    expect(uniqueEmailIndexes).toHaveLength(1);
+  });
+});

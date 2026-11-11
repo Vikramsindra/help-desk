@@ -10,6 +10,20 @@ import NotFoundPage from "../pages/common/NotFoundPage";
 import LoginPage from "../pages/auth/LoginPage";
 import RegisterPage from "../pages/auth/RegisterPage";
 import LandingPage from "../pages/public/LandingPage";
+import AboutPage from "../pages/public/AboutPage";
+import FeaturesPage from "../pages/public/FeaturesPage";
+import HelpCenterPage from "../pages/public/HelpCenterPage";
+import FAQPage from "../pages/public/FAQPage";
+import DocumentationPage from "../pages/public/DocumentationPage";
+import PrivacyPolicyPage from "../pages/legal/PrivacyPolicyPage";
+import TermsPage from "../pages/legal/TermsPage";
+import CookiePolicyPage from "../pages/legal/CookiePolicyPage";
+import DataProtectionPage from "../pages/legal/DataProtectionPage";
+import AcceptableUsePage from "../pages/legal/AcceptableUsePage";
+import SecurityPolicyPage from "../pages/legal/SecurityPolicyPage";
+import DataRetentionPage from "../pages/legal/DataRetentionPage";
+import DisclaimerPage from "../pages/legal/DisclaimerPage";
+import AccountAccessPolicyPage from "../pages/legal/AccountAccessPolicyPage";
 import CustomerDashboardPage from "../pages/customer/CustomerDashboardPage";
 import MyTicketsPage from "../pages/customer/MyTicketsPage";
 import CreateTicketPage from "../pages/customer/CreateTicketPage";
@@ -48,6 +62,23 @@ export default function AppRoutes() {
     <Routes>
       <Route element={<PublicLayout />}>
         <Route index element={<HomeRoute />} />
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/features" element={<FeaturesPage />} />
+        <Route path="/help" element={<HelpCenterPage />} />
+        <Route path="/faq" element={<FAQPage />} />
+        <Route path="/documentation" element={<DocumentationPage />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+        <Route path="/terms-of-service" element={<TermsPage />} />
+        <Route path="/cookie-policy" element={<CookiePolicyPage />} />
+        <Route path="/data-protection" element={<DataProtectionPage />} />
+        <Route path="/acceptable-use" element={<AcceptableUsePage />} />
+        <Route path="/security-policy" element={<SecurityPolicyPage />} />
+        <Route path="/data-retention" element={<DataRetentionPage />} />
+        <Route path="/disclaimer" element={<DisclaimerPage />} />
+        <Route
+          path="/account-access-policy"
+          element={<AccountAccessPolicyPage />}
+        />
       </Route>
       <Route element={<AuthLayout />}>
         <Route
