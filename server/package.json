@@ -11,7 +11,8 @@
     "test:unit": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.unit.config.js --runInBand",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch --runInBand",
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage --runInBand",
-    "seed:superadmin": "node scripts/seed-superadmin.js"
+    "seed:superadmin": "node scripts/seed-superadmin.js",
+    "seed:demo": "node scripts/seed-demo.js"
   },
   "author": "Vikram",
   "license": "ISC",
