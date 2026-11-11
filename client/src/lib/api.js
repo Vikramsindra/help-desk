@@ -1,7 +1,11 @@
-const API_BASE = "/api";
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || "/api").replace(
+  /\/$/,
+  "",
+);
 
 let accessToken = null;
 let refreshPromise = null;
+let authFailureHandler = null;
 
 export const setAccessToken = (token) => {
   accessToken = token;
@@ -11,6 +15,10 @@ export const getAccessToken = () => accessToken;
 
 export const clearAccessToken = () => {
   accessToken = null;
+};
+
+export const setAuthFailureHandler = (handler) => {
+  authFailureHandler = handler;
 };
 
 /**
@@ -75,7 +83,11 @@ export async function apiFetch(endpoint, options = {}) {
   });
 
   // If 401, try refreshing the token and retry once
-  if (res.status === 401 && accessToken) {
+  if (
+    res.status === 401 &&
+    accessToken &&
+    !["/user/login", "/user/register", "/user/refresh"].includes(endpoint)
+  ) {
     const newToken = await refreshAccessToken();
     if (newToken) {
       headers.Authorization = `Bearer ${newToken}`;
@@ -84,6 +96,12 @@ export async function apiFetch(endpoint, options = {}) {
         headers,
         credentials: "include",
       });
+      if (res.status === 401) {
+        clearAccessToken();
+        authFailureHandler?.();
+      }
+    } else {
+      authFailureHandler?.();
     }
   }
 
@@ -92,10 +110,15 @@ export async function apiFetch(endpoint, options = {}) {
     return { success: true, message: "Success", data: null };
   }
 
-  const json = await res.json();
+  const json = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    const err = new Error(json.error?.message || "Request failed");
+    const message =
+      json.error?.message ||
+      (res.status >= 500
+        ? "The support service is unavailable. Please try again shortly."
+        : "Request failed");
+    const err = new Error(message);
     err.code = json.error?.code || "UNKNOWN_ERROR";
     err.status = res.status;
     err.details = json.error?.details;

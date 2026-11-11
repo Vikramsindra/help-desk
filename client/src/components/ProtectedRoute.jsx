@@ -1,5 +1,6 @@
-import { Navigate, Outlet } from "react-router";
-import { useAuth } from "../context/AuthContext";
+import { Navigate, Outlet, useLocation } from "react-router";
+import { useAuth } from "../hooks/useAuth";
+import LoadingSpinner from "./common/LoadingSpinner";
 
 /**
  * ProtectedRoute — wraps routes that require authentication.
@@ -7,17 +8,14 @@ import { useAuth } from "../context/AuthContext";
  */
 export default function ProtectedRoute({ allowedRoles }) {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-600"></div>
-      </div>
-    );
+    return <LoadingSpinner fullScreen label="Restoring your session" />;
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {

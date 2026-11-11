@@ -1,0 +1,24 @@
+@theme {
+  --color-paper: #f5f7f4;
+  --color-white: #ffffff;
+  --color-ink: #1d2b2a;
+  --color-muted: #697674;
+  --color-line: #dfe6e2;
+  --color-mist: #edf3ef;
+  --color-forest: #173a35;
+  --color-brand: #267466;
+  --color-brand-dark: #1d5e54;
+  --color-mint: #a9d2c4;
+  --color-coral: #d66b55;
+  --font-sans: "Segoe UI Variable", "Aptos", "Segoe UI", sans-serif;
+}
+
+:root {
+  color-scheme: light;
+  --paper: #f5f7f4;
+  --ink: #1d2b2a;
+  --muted: #697674;
+  --line: #dfe6e2;
+  --mist: #edf3ef;
+  --brand: #267466;
+}
