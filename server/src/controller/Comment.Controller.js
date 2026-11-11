@@ -4,6 +4,8 @@ import mongoose from "mongoose";
 import { commentSchema } from "../utils/Schema.Validation.js";
 import ApiResponse from "../utils/ApiResponse.js";
 import ApiError from "../utils/ApiError.js";
+import { createNotifications } from "../utils/notification.functions.js";
+import { emitToStaff, emitToTicketRoom } from "../realtime/socket.js";
 
 // ─── Access check helper ──────────────────────────────────────────────────────
 
@@ -21,11 +23,15 @@ const createCommentController = async (req, res, next) => {
 
     // Validate ticket ID format
     if (!ticketId) {
-      return next(new ApiError(400, "TICKET_ID_REQUIRED", "Ticket ID is required"));
+      return next(
+        new ApiError(400, "TICKET_ID_REQUIRED", "Ticket ID is required"),
+      );
     }
 
     if (!mongoose.Types.ObjectId.isValid(ticketId)) {
-      return next(new ApiError(400, "INVALID_TICKET_ID", "Invalid ticket ID format"));
+      return next(
+        new ApiError(400, "INVALID_TICKET_ID", "Invalid ticket ID format"),
+      );
     }
 
     // Check if ticket exists
@@ -44,7 +50,22 @@ const createCommentController = async (req, res, next) => {
 
     if (error) {
       return next(
-        new ApiError(400, "VALIDATION_ERROR", error.details[0].message, error.details),
+        new ApiError(
+          400,
+          "VALIDATION_ERROR",
+          error.details[0].message,
+          error.details,
+        ),
+      );
+    }
+
+    if (value.isInternal && req.user.role === "user") {
+      return next(
+        new ApiError(
+          403,
+          "INTERNAL_COMMENT_FORBIDDEN",
+          "Only staff can create internal comments",
+        ),
       );
     }
 
@@ -53,6 +74,7 @@ const createCommentController = async (req, res, next) => {
       ticket: ticketId,
       author: req.user.id,
       message: value.message,
+      isInternal: value.isInternal,
     });
 
     await comment.save();
@@ -60,9 +82,26 @@ const createCommentController = async (req, res, next) => {
     // Populate author info
     await comment.populate("author", "name email role");
 
-    return res.status(201).json(
-      new ApiResponse(comment, "Comment created successfully"),
-    );
+    await createNotifications({
+      userIds: value.isInternal
+        ? [ticket.assignedTo]
+        : [ticket.createdBy, ticket.assignedTo],
+      ticketId,
+      type: "comment_added",
+      message: value.isInternal
+        ? `Internal note added to: ${ticket.title}`
+        : `New comment on: ${ticket.title}`,
+      excludeUserId: req.user.id,
+    });
+    if (value.isInternal) {
+      await emitToStaff("comment:created", comment.toObject());
+    } else {
+      emitToTicketRoom(ticketId, "comment:created", comment.toObject());
+    }
+
+    return res
+      .status(201)
+      .json(new ApiResponse(comment, "Comment created successfully"));
   } catch (error) {
     next(error);
   }
@@ -76,11 +115,15 @@ const getTicketCommentsController = async (req, res, next) => {
 
     // Validate ticket ID format
     if (!ticketId) {
-      return next(new ApiError(400, "TICKET_ID_REQUIRED", "Ticket ID is required"));
+      return next(
+        new ApiError(400, "TICKET_ID_REQUIRED", "Ticket ID is required"),
+      );
     }
 
     if (!mongoose.Types.ObjectId.isValid(ticketId)) {
-      return next(new ApiError(400, "INVALID_TICKET_ID", "Invalid ticket ID format"));
+      return next(
+        new ApiError(400, "INVALID_TICKET_ID", "Invalid ticket ID format"),
+      );
     }
 
     // Check if ticket exists
@@ -95,13 +138,18 @@ const getTicketCommentsController = async (req, res, next) => {
     }
 
     // Fetch all comments for the ticket (chronological order)
-    const comments = await Comment.find({ ticket: ticketId })
+    const commentFilter = { ticket: ticketId };
+    if (req.user.role === "user") commentFilter.isInternal = false;
+
+    const comments = await Comment.find(commentFilter)
       .populate("author", "name role")
       .sort({ createdAt: 1 });
 
-    return res.status(200).json(
-      new ApiResponse({ items: comments }, "Comments fetched successfully"),
-    );
+    return res
+      .status(200)
+      .json(
+        new ApiResponse({ items: comments }, "Comments fetched successfully"),
+      );
   } catch (error) {
     next(error);
   }
@@ -117,7 +165,11 @@ const deleteCommentController = async (req, res, next) => {
     // Validate IDs
     if (!ticketId || !commentId) {
       return next(
-        new ApiError(400, "ID_REQUIRED", "Ticket ID and Comment ID are required"),
+        new ApiError(
+          400,
+          "ID_REQUIRED",
+          "Ticket ID and Comment ID are required",
+        ),
       );
     }
 
@@ -140,7 +192,11 @@ const deleteCommentController = async (req, res, next) => {
     // Check if comment belongs to the ticket
     if (comment.ticket.toString() !== ticketId) {
       return next(
-        new ApiError(400, "COMMENT_TICKET_MISMATCH", "Comment does not belong to this ticket"),
+        new ApiError(
+          400,
+          "COMMENT_TICKET_MISMATCH",
+          "Comment does not belong to this ticket",
+        ),
       );
     }
 
@@ -150,16 +206,20 @@ const deleteCommentController = async (req, res, next) => {
       !["admin", "super_admin"].includes(req.user.role)
     ) {
       return next(
-        new ApiError(403, "DELETE_FORBIDDEN", "You can only delete your own comments"),
+        new ApiError(
+          403,
+          "DELETE_FORBIDDEN",
+          "You can only delete your own comments",
+        ),
       );
     }
 
     // Delete the comment
     await Comment.findByIdAndDelete(commentId);
 
-    return res.status(200).json(
-      new ApiResponse({ commentId }, "Comment deleted successfully"),
-    );
+    return res
+      .status(200)
+      .json(new ApiResponse({ commentId }, "Comment deleted successfully"));
   } catch (error) {
     next(error);
   }

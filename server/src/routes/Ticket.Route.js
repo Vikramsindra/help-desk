@@ -9,6 +9,7 @@ import {
   getAllTicketsController,
   getAssignedTicketsController,
   assignTicketController,
+  getDashboardStatsController,
 } from "../controller/Ticket.Controller.js";
 import { allowRoles } from "../middlewares/role.Middleware.js";
 import CommentRoute from "./Comment.Route.js";
@@ -16,6 +17,7 @@ import CommentRoute from "./Comment.Route.js";
 const router = express.Router();
 
 router.post("/", authMiddleware, createTicket);
+router.get("/dashboard/stats", authMiddleware, getDashboardStatsController);
 
 router.get(
   "/admin",
@@ -24,7 +26,12 @@ router.get(
   getAllTicketsController,
 );
 
-router.get("/my-ticket", authMiddleware, getMyTicketsController);
+router.get(
+  "/my-ticket",
+  authMiddleware,
+  allowRoles("user"),
+  getMyTicketsController,
+);
 router.get(
   "/assigned-to-me",
   authMiddleware,

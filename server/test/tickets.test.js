@@ -289,3 +289,120 @@ describe("DELETE /api/tickets/:id", () => {
     expect(res.body.error.code).toBe("AGENT_DELETE_FORBIDDEN");
   });
 });
+
+describe("GET /api/tickets/admin filters and pagination", () => {
+  it("filters by category and literal title/description search", async () => {
+    await createTicket(user._id, {
+      title: "VPN timeout issue",
+      description: "Connection drops",
+      category: "Network",
+      priority: "high",
+    });
+    await createTicket(user._id, {
+      title: "VPN access",
+      description: "Certificate renewal",
+      category: "Account",
+      priority: "high",
+    });
+
+    const res = await request
+      .get(
+        "/api/tickets/admin?status=open&priority=high&category=Network&search=timeout&sortBy=updatedAt&sortOrder=asc&limit=1",
+      )
+      .set(authHeader(adminToken));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.items).toHaveLength(1);
+    expect(res.body.data.items[0].title).toBe("VPN timeout issue");
+    expect(res.body.data.pagination.limit).toBe(1);
+  });
+
+  it("rejects invalid filters and excessive page sizes", async () => {
+    const invalidStatus = await request
+      .get("/api/tickets/admin?status=unknown")
+      .set(authHeader(adminToken));
+    const excessiveLimit = await request
+      .get("/api/tickets/admin?limit=1000")
+      .set(authHeader(adminToken));
+
+    expect(invalidStatus.status).toBe(400);
+    expect(excessiveLimit.status).toBe(400);
+  });
+});
+
+describe("DELETE /api/tickets/:id customer policy", () => {
+  it("prevents customers from deleting their non-open tickets", async () => {
+    const ticket = await createTicket(user._id, { status: "resolved" });
+
+    const res = await request
+      .delete(`/api/tickets/${ticket._id}`)
+      .set(authHeader(userToken));
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe("TICKET_DELETE_FORBIDDEN");
+  });
+});
+
+describe("GET /api/tickets/dashboard/stats", () => {
+  it("returns role-specific customer statistics", async () => {
+    await createTicket(user._id, { status: "open" });
+    await createTicket(user._id, { status: "in progress" });
+
+    const res = await request
+      .get("/api/tickets/dashboard/stats")
+      .set(authHeader(userToken));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      totalTickets: 2,
+      openTickets: 1,
+      inProgressTickets: 1,
+      resolvedTickets: 0,
+    });
+  });
+
+  it("returns assigned ticket statistics for agents", async () => {
+    await createTicket(user._id, { assignedTo: agent._id, status: "open" });
+
+    const res = await request
+      .get("/api/tickets/dashboard/stats")
+      .set(authHeader(agentToken));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      assignedTickets: 1,
+      pendingTickets: 1,
+      inProgressTickets: 0,
+      resolvedTickets: 0,
+    });
+  });
+});
+
+describe("PATCH /api/tickets/:ticketId/assign", () => {
+  it("allows admins to assign tickets to active agents", async () => {
+    const ticket = await createTicket(user._id);
+    const res = await request
+      .patch(`/api/tickets/${ticket._id}/assign`)
+      .set(authHeader(adminToken))
+      .send({ assignedTo: agent._id.toString() });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.assignedTo._id.toString()).toBe(agent._id.toString());
+    expect(res.body.data.assignedAt).toBeTruthy();
+  });
+
+  it("rejects customers and malformed assignment bodies", async () => {
+    const ticket = await createTicket(user._id);
+    const forbidden = await request
+      .patch(`/api/tickets/${ticket._id}/assign`)
+      .set(authHeader(userToken))
+      .send({ assignedTo: agent._id.toString() });
+    const invalid = await request
+      .patch(`/api/tickets/${ticket._id}/assign`)
+      .set(authHeader(adminToken))
+      .send({ assignedTo: "not-an-id" });
+
+    expect(forbidden.status).toBe(403);
+    expect(invalid.status).toBe(400);
+  });
+});

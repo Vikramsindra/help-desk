@@ -23,28 +23,30 @@
 
 ## Global Conventions
 
-| Convention | Value |
-|---|---|
-| Content-Type | `application/json` |
-| Character encoding | UTF-8 |
-| Date format | ISO 8601 (`2026-08-27T10:00:00.000Z`) |
-| ID format | MongoDB ObjectId (24-char hex string) |
-| Empty list | `{ "items": [], "pagination": { ... } }` |
-| Boolean strings | Not used — always proper `true`/`false` |
+| Convention         | Value                                    |
+| ------------------ | ---------------------------------------- |
+| Content-Type       | `application/json`                       |
+| Character encoding | UTF-8                                    |
+| Date format        | ISO 8601 (`2026-08-27T10:00:00.000Z`)    |
+| ID format          | MongoDB ObjectId (24-char hex string)    |
+| Empty list         | `{ "items": [], "pagination": { ... } }` |
+| Boolean strings    | Not used — always proper `true`/`false`  |
 
 ### HTTP Status Codes Used
 
-| Code | Meaning |
-|---|---|
-| 200 | Success (GET, PATCH, DELETE) |
-| 201 | Created (POST mutations) |
-| 204 | No Content (logout — no body) |
-| 400 | Bad Request / Validation Error |
-| 401 | Unauthorized — missing or invalid token |
-| 403 | Forbidden — authenticated but insufficient role |
-| 404 | Not Found |
-| 409 | Conflict — duplicate resource |
-| 500 | Internal Server Error |
+| Code | Meaning                                         |
+| ---- | ----------------------------------------------- |
+| 200  | Success (GET, PATCH, DELETE)                    |
+| 201  | Created (POST mutations)                        |
+| 204  | No Content (logout — no body)                   |
+| 400  | Bad Request / Validation Error                  |
+| 401  | Unauthorized — missing or invalid token         |
+| 403  | Forbidden — authenticated but insufficient role |
+| 404  | Not Found                                       |
+| 409  | Conflict — duplicate resource                   |
+| 413  | Request body exceeds 32 KB                      |
+| 429  | Authentication rate limit exceeded              |
+| 500  | Internal Server Error                           |
 
 ---
 
@@ -108,7 +110,11 @@ Every successful response (except documented exceptions) uses the **`ApiResponse
     "title": "Login button broken",
     "status": "open",
     "priority": "high",
-    "createdBy": { "_id": "...", "name": "Alice", "email": "alice@example.com" },
+    "createdBy": {
+      "_id": "...",
+      "name": "Alice",
+      "email": "alice@example.com"
+    },
     "assignedTo": null,
     "createdAt": "2026-08-27T10:00:00.000Z",
     "updatedAt": "2026-08-27T10:00:00.000Z"
@@ -182,33 +188,42 @@ All errors use the **`ApiError`** envelope produced by the global error middlewa
 
 ### Error Codes Reference
 
-| Code | Status | Description |
-|---|---|---|
-| `VALIDATION_ERROR` | 400 | Joi schema validation failed |
-| `TICKET_ID_REQUIRED` | 400 | Ticket ID missing from params |
-| `INVALID_TICKET_ID` | 400 | Ticket ID is not a valid ObjectId |
-| `INVALID_ID` | 400 | One or more IDs are invalid |
-| `ID_REQUIRED` | 400 | Required ID param missing |
-| `COMMENT_TICKET_MISMATCH` | 400 | Comment belongs to a different ticket |
-| `TOKEN_MISSING` | 401 | Authorization header absent |
-| `TOKEN_INVALID_FORMAT` | 401 | Authorization header not `Bearer <token>` |
-| `TOKEN_EXPIRED` | 401 | Access token has expired |
-| `TOKEN_INVALID` | 401 | Access token signature is invalid |
-| `INVALID_CREDENTIALS` | 401 | Email/password mismatch |
-| `REFRESH_TOKEN_MISSING` | 401 | Refresh token cookie absent |
-| `REFRESH_TOKEN_EXPIRED` | 401 | Refresh token has expired |
-| `REFRESH_TOKEN_INVALID` | 401 | Refresh token invalid or not in DB |
-| `AUTH_REQUIRED` | 401 | Request reached role check without auth |
-| `USER_NOT_FOUND` | 401 | User from refresh token not found |
-| `ACCESS_DENIED` | 403 | Role not permitted for this route |
-| `AGENT_DELETE_FORBIDDEN` | 403 | Agents cannot delete tickets |
-| `DELETE_FORBIDDEN` | 403 | Can only delete own comments |
-| `TICKET_NOT_FOUND` | 404 | Ticket not found or no access |
-| `AGENT_NOT_FOUND` | 404 | Assignee not found or not an agent |
-| `COMMENT_NOT_FOUND` | 404 | Comment not found |
-| `ROUTE_NOT_FOUND` | 404 | No matching route |
-| `USER_ALREADY_EXISTS` | 409 | Email already registered |
-| `INTERNAL_ERROR` | 500 | Unexpected server error |
+| Code                         | Status | Description                               |
+| ---------------------------- | ------ | ----------------------------------------- |
+| `VALIDATION_ERROR`           | 400    | Joi schema validation failed              |
+| `UNSAFE_INPUT`               | 400    | Mongo operator or unsafe key rejected     |
+| `INVALID_JSON`               | 400    | Malformed JSON request body               |
+| `TICKET_ID_REQUIRED`         | 400    | Ticket ID missing from params             |
+| `INVALID_TICKET_ID`          | 400    | Ticket ID is not a valid ObjectId         |
+| `INVALID_ID`                 | 400    | One or more IDs are invalid               |
+| `ID_REQUIRED`                | 400    | Required ID param missing                 |
+| `COMMENT_TICKET_MISMATCH`    | 400    | Comment belongs to a different ticket     |
+| `TOKEN_MISSING`              | 401    | Authorization header absent               |
+| `TOKEN_INVALID_FORMAT`       | 401    | Authorization header not `Bearer <token>` |
+| `TOKEN_EXPIRED`              | 401    | Access token has expired                  |
+| `TOKEN_INVALID`              | 401    | Access token signature is invalid         |
+| `ACCOUNT_INACTIVE`           | 401    | Account is inactive or unavailable        |
+| `INVALID_CREDENTIALS`        | 401    | Email/password mismatch                   |
+| `REFRESH_TOKEN_MISSING`      | 401    | Refresh token cookie absent               |
+| `REFRESH_TOKEN_EXPIRED`      | 401    | Refresh token has expired                 |
+| `REFRESH_TOKEN_INVALID`      | 401    | Refresh token invalid or not in DB        |
+| `AUTH_REQUIRED`              | 401    | Request reached role check without auth   |
+| `USER_NOT_FOUND`             | 401    | User from refresh token not found         |
+| `ACCESS_DENIED`              | 403    | Role not permitted for this route         |
+| `INTERNAL_COMMENT_FORBIDDEN` | 403    | Customers cannot create internal comments |
+| `TICKET_DELETE_FORBIDDEN`    | 403    | Customer ticket is not open               |
+| `AGENT_DELETE_FORBIDDEN`     | 403    | Agents cannot delete tickets              |
+| `DELETE_FORBIDDEN`           | 403    | Can only delete own comments              |
+| `TICKET_NOT_FOUND`           | 404    | Ticket not found or no access             |
+| `AGENT_NOT_FOUND`            | 404    | Assignee not found or not an agent        |
+| `STAFF_NOT_FOUND`            | 404    | Staff member not found                    |
+| `COMMENT_NOT_FOUND`          | 404    | Comment not found                         |
+| `ROUTE_NOT_FOUND`            | 404    | No matching route                         |
+| `USER_ALREADY_EXISTS`        | 409    | Email already registered                  |
+| `PAYLOAD_TOO_LARGE`          | 413    | Request body exceeds 32 KB                |
+| `RATE_LIMITED`               | 429    | Too many authentication attempts          |
+| `NOTIFICATION_NOT_FOUND`     | 404    | Notification not found for current user   |
+| `INTERNAL_ERROR`             | 500    | Unexpected server error                   |
 
 ---
 
@@ -216,12 +231,16 @@ All errors use the **`ApiError`** envelope produced by the global error middlewa
 
 Paginated list endpoints accept:
 
-| Query Param | Type | Default | Description |
-|---|---|---|---|
-| `page` | integer | `1` | 1-indexed page number |
-| `limit` | integer | `20` | Items per page |
-| `status` | string | — | Filter by ticket status |
-| `priority` | string | — | Filter by ticket priority |
+| Query Param | Type    | Default     | Description                           |
+| ----------- | ------- | ----------- | ------------------------------------- |
+| `page`      | integer | `1`         | 1-indexed, maximum 10,000,000         |
+| `limit`     | integer | `20`        | Items per page, maximum 100           |
+| `status`    | string  | —           | Filter by ticket status               |
+| `priority`  | string  | —           | Filter by ticket priority             |
+| `category`  | string  | —           | Exact ticket category                 |
+| `search`    | string  | —           | Literal match in title or description |
+| `sortBy`    | string  | `createdAt` | `createdAt` or `updatedAt`            |
+| `sortOrder` | string  | `desc`      | `asc` or `desc`                       |
 
 Pagination object in every list response:
 
@@ -241,60 +260,88 @@ Pagination object in every list response:
 ## Enum Values
 
 ### Ticket Status
+
 `open` | `in progress` | `resolved` | `closed`
 
 ### Ticket Priority
+
 `low` | `medium` | `high`
 
 ### User Role
+
 `user` | `agent` | `admin` | `super_admin`
 
 ---
 
 ## Endpoint Table
 
-| Method | Path | Auth | Role | Description |
-|---|---|---|---|---|
-| `GET` | `/api/health` | No | Any | Health check |
-| `POST` | `/api/user/register` | No | — | Register a new user |
-| `POST` | `/api/user/login` | No | — | Login |
-| `POST` | `/api/user/refresh` | Cookie | — | Rotate tokens |
-| `POST` | `/api/user/logout` | Cookie | — | Logout (204) |
-| `POST` | `/api/admin/users` | Bearer | `super_admin` | Create staff (agent/admin) |
-| `POST` | `/api/tickets` | Bearer | any auth | Create ticket |
-| `GET` | `/api/tickets/admin` | Bearer | `admin`, `super_admin` | List all tickets (paginated) |
-| `GET` | `/api/tickets/my-ticket` | Bearer | `user` | List own tickets |
-| `GET` | `/api/tickets/assigned-to-me` | Bearer | `agent` | List assigned tickets |
-| `GET` | `/api/tickets/:id` | Bearer | owner/agent/admin | Get ticket detail |
-| `PATCH` | `/api/tickets/:id` | Bearer | owner/agent/admin | Update ticket |
-| `DELETE` | `/api/tickets/:id` | Bearer | owner/admin | Delete ticket |
-| `PATCH` | `/api/tickets/:ticketId/assign` | Bearer | `admin`, `super_admin` | Assign ticket to agent |
-| `GET` | `/api/tickets/:ticketId/comments` | Bearer | owner/agent/admin | List comments |
-| `POST` | `/api/tickets/:ticketId/comments` | Bearer | owner/agent/admin | Add comment |
-| `DELETE` | `/api/tickets/:ticketId/comments/:commentId` | Bearer | author/admin | Delete comment |
+| Method   | Path                                         | Auth   | Role                   | Description                                             |
+| -------- | -------------------------------------------- | ------ | ---------------------- | ------------------------------------------------------- |
+| `GET`    | `/api/health`                                | No     | Any                    | Health check                                            |
+| `POST`   | `/api/user/register`                         | No     | —                      | Register a new user                                     |
+| `POST`   | `/api/user/login`                            | No     | —                      | Login                                                   |
+| `POST`   | `/api/user/refresh`                          | Cookie | —                      | Rotate tokens                                           |
+| `POST`   | `/api/user/logout`                           | Cookie | —                      | Logout (204)                                            |
+| `GET`    | `/api/user/me`                               | Bearer | Any authenticated role | Get current database user                               |
+| `POST`   | `/api/admin/users`                           | Bearer | `super_admin`          | Create staff (agent/admin)                              |
+| `GET`    | `/api/admin/users`                           | Bearer | `super_admin`          | List staff (paginated; optional role, isActive, search) |
+| `GET`    | `/api/admin/users/:staffId`                  | Bearer | `super_admin`          | Get staff details                                       |
+| `PATCH`  | `/api/admin/users/:staffId`                  | Bearer | `super_admin`          | Update staff or activate/deactivate                     |
+| `POST`   | `/api/tickets`                               | Bearer | any auth               | Create ticket                                           |
+| `GET`    | `/api/tickets/admin`                         | Bearer | `admin`, `super_admin` | List all tickets (paginated)                            |
+| `GET`    | `/api/tickets/my-ticket`                     | Bearer | `user`                 | List own tickets (paginated)                            |
+| `GET`    | `/api/tickets/assigned-to-me`                | Bearer | `agent`                | List assigned tickets (paginated)                       |
+| `GET`    | `/api/tickets/dashboard/stats`               | Bearer | Any authenticated role | Role-specific dashboard statistics                      |
+| `GET`    | `/api/tickets/:id`                           | Bearer | owner/agent/admin      | Get ticket detail                                       |
+| `PATCH`  | `/api/tickets/:id`                           | Bearer | owner/agent/admin      | Update ticket                                           |
+| `DELETE` | `/api/tickets/:id`                           | Bearer | owner/admin            | Delete ticket                                           |
+| `PATCH`  | `/api/tickets/:ticketId/assign`              | Bearer | `admin`, `super_admin` | Assign ticket to agent                                  |
+| `GET`    | `/api/tickets/:ticketId/comments`            | Bearer | owner/agent/admin      | List comments                                           |
+| `POST`   | `/api/tickets/:ticketId/comments`            | Bearer | owner/agent/admin      | Add comment                                             |
+| `DELETE` | `/api/tickets/:ticketId/comments/:commentId` | Bearer | author/admin           | Delete comment                                          |
+| `GET`    | `/api/notifications`                         | Bearer | Any authenticated role | List own notifications (paginated)                      |
+| `PATCH`  | `/api/notifications/:notificationId/read`    | Bearer | Owner                  | Mark own notification read                              |
+| `PATCH`  | `/api/notifications/read-all`                | Bearer | Any authenticated role | Mark all own notifications read                         |
+
+Ticket list endpoints accept `page` (1 to 10,000,000), `limit` (1 to 100),
+`status`, `priority`, `category`, `search` (literal title/description match),
+`sortBy` (`createdAt`, `updatedAt`, or `assignedAt`), and `sortOrder` (`asc` or `desc`). Unknown
+query keys and invalid enum values return the standard 400 validation envelope.
+Tickets include `assignedAt`, which is `null` until assignment and updated whenever
+an administrator assigns or reassigns the ticket. Older records without this field
+fall back to `updatedAt` ordering when sorting by assignment time.
+Customer deletion is allowed only for the customer's own `open` tickets; agents
+cannot delete tickets, while admins and super-admins can delete any ticket.
+
+Internal comments are created with `{ "isInternal": true }` by staff only.
+Customers can never list internal comments; the server applies this filter before
+returning comment data.
 
 ---
 
 ## Role-Permission Matrix
 
-| Action | `user` | `agent` | `admin` | `super_admin` |
-|---|:---:|:---:|:---:|:---:|
-| Register / Login / Refresh / Logout | ✅ | ✅ | ✅ | ✅ |
-| Create ticket | ✅ | ✅ | ✅ | ✅ |
-| View own tickets | ✅ | — | — | — |
-| View assigned tickets | — | ✅ | — | — |
-| View all tickets (admin list) | — | — | ✅ | ✅ |
-| View ticket detail (own) | ✅ | — | — | — |
-| View ticket detail (assigned) | — | ✅ | — | — |
-| View any ticket detail | — | — | ✅ | ✅ |
-| Update ticket (title/desc/category) | ✅ (own) | — | ✅ | ✅ |
-| Update ticket (priority/status) | — | ✅ (assigned) | ✅ | ✅ |
-| Delete ticket | ✅ (own) | ❌ | ✅ | ✅ |
-| Assign ticket | — | — | ✅ | ✅ |
-| Add comment | ✅ (own ticket) | ✅ (assigned) | ✅ | ✅ |
-| View comments | ✅ (own ticket) | ✅ (assigned) | ✅ | ✅ |
-| Delete comment | ✅ (own comment) | ✅ (own comment) | ✅ | ✅ |
-| Create staff (agent/admin) | — | — | — | ✅ |
+| Action                              |       `user`        |     `agent`      | `admin` | `super_admin` |
+| ----------------------------------- | :-----------------: | :--------------: | :-----: | :-----------: |
+| Register / Login / Refresh / Logout |         ✅          |        ✅        |   ✅    |      ✅       |
+| Create ticket                       |         ✅          |        ✅        |   ✅    |      ✅       |
+| View own tickets                    |         ✅          |        —         |    —    |       —       |
+| View assigned tickets               |          —          |        ✅        |    —    |       —       |
+| View all tickets (admin list)       |          —          |        —         |   ✅    |      ✅       |
+| View ticket detail (own)            |         ✅          |        —         |    —    |       —       |
+| View ticket detail (assigned)       |          —          |        ✅        |    —    |       —       |
+| View any ticket detail              |          —          |        —         |   ✅    |      ✅       |
+| Update ticket (title/desc/category) |      ✅ (own)       |        —         |   ✅    |      ✅       |
+| Update ticket (priority/status)     |          —          |  ✅ (assigned)   |   ✅    |      ✅       |
+| Delete ticket                       | ✅ (own, open only) |        ❌        |   ✅    |      ✅       |
+| Assign ticket                       |          —          |        —         |   ✅    |      ✅       |
+| Add comment                         |   ✅ (own ticket)   |  ✅ (assigned)   |   ✅    |      ✅       |
+| Add internal comment                |          —          |  ✅ (assigned)   |   ✅    |      ✅       |
+| View comments                       |   ✅ (own ticket)   |  ✅ (assigned)   |   ✅    |      ✅       |
+| View internal comments              |          —          |  ✅ (assigned)   |   ✅    |      ✅       |
+| Delete comment                      |  ✅ (own comment)   | ✅ (own comment) |   ✅    |      ✅       |
+| Create/list/update/deactivate staff |          —          |        —         |    —    |      ✅       |
+| View/manage own notifications       |         ✅          |        ✅        |   ✅    |      ✅       |
 
 ---
 
@@ -303,6 +350,7 @@ Pagination object in every list response:
 ### Register
 
 **Request**
+
 ```http
 POST /api/user/register
 Content-Type: application/json
@@ -310,11 +358,15 @@ Content-Type: application/json
 {
   "name": "Alice Smith",
   "email": "alice@example.com",
+Dashboard `totalUsers` counts customer accounts (`role: user`); `totalAgents` and
+`totalAdministrators` count their respective roles. Status and priority groups
+include all supported enum values, including zero-count groups.
   "password": "Secure@Pass1"
 }
 ```
 
 **Response — 201**
+
 ```json
 {
   "success": true,
@@ -334,6 +386,7 @@ Content-Type: application/json
 ### Login
 
 **Request**
+
 ```http
 POST /api/user/login
 Content-Type: application/json
@@ -345,6 +398,7 @@ Content-Type: application/json
 ```
 
 **Response — 200**
+
 ```json
 {
   "success": true,
@@ -364,6 +418,7 @@ Content-Type: application/json
 ### Create Ticket
 
 **Request**
+
 ```http
 POST /api/tickets
 Authorization: Bearer <accessToken>
@@ -378,6 +433,7 @@ Content-Type: application/json
 ```
 
 **Response — 201**
+
 ```json
 {
   "success": true,
@@ -400,12 +456,14 @@ Content-Type: application/json
 ### List Tickets (Admin — Paginated)
 
 **Request**
+
 ```http
 GET /api/tickets/admin?page=2&limit=10&status=open
 Authorization: Bearer <adminAccessToken>
 ```
 
 **Response — 200**
+
 ```json
 {
   "success": true,
@@ -417,8 +475,16 @@ Authorization: Bearer <adminAccessToken>
         "title": "Login button broken on mobile",
         "status": "open",
         "priority": "high",
-        "createdBy": { "_id": "...", "name": "Alice", "email": "alice@example.com" },
-        "assignedTo": { "_id": "...", "name": "Bob Agent", "email": "bob@example.com" },
+        "createdBy": {
+          "_id": "...",
+          "name": "Alice",
+          "email": "alice@example.com"
+        },
+        "assignedTo": {
+          "_id": "...",
+          "name": "Bob Agent",
+          "email": "bob@example.com"
+        },
         "createdAt": "2026-08-27T10:00:00.000Z",
         "updatedAt": "2026-08-27T10:00:00.000Z"
       }
@@ -438,6 +504,7 @@ Authorization: Bearer <adminAccessToken>
 ### Error Example — Validation
 
 **Response — 400**
+
 ```json
 {
   "success": false,
@@ -458,6 +525,7 @@ Authorization: Bearer <adminAccessToken>
 ### Error Example — Not Found
 
 **Response — 404**
+
 ```json
 {
   "success": false,
@@ -472,7 +540,7 @@ Authorization: Bearer <adminAccessToken>
 
 ## Documented Exceptions
 
-| Endpoint | Why no `ApiResponse` |
-|---|---|
-| `POST /api/user/logout` | **HTTP 204 No Content** — a body must not be sent. |
-| `GET /api/health` | Minimal health-check shape `{ status, message }` — intentionally simple for uptime monitors. |
+| Endpoint                | Why no `ApiResponse`                                                                         |
+| ----------------------- | -------------------------------------------------------------------------------------------- |
+| `POST /api/user/logout` | **HTTP 204 No Content** — a body must not be sent.                                           |
+| `GET /api/health`       | Minimal health-check shape `{ status, message }` — intentionally simple for uptime monitors. |

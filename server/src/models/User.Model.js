@@ -12,6 +12,7 @@ const userSchema = mongoose.Schema(
     password: {
       type: String,
       required: true,
+      select: false,
     },
     name: {
       type: String,
@@ -21,6 +22,10 @@ const userSchema = mongoose.Schema(
       type: String,
       enum: ["user", "agent", "admin", "super_admin"],
       default: "user",
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
     },
     refreshTokenHash: {
       type: String,

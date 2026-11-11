@@ -1,7 +1,9 @@
 import express from "express";
+import { authMiddleware } from "../middlewares/auth.Middleware.js";
 import {
   loginController,
   refreshController,
+  getCurrentUserController,
   registerController,
   logoutController,
 } from "../controller/User.Controller.js";
@@ -18,5 +20,6 @@ router.post("/login", loginController);
 
 router.post("/refresh", refreshController);
 router.post("/logout", logoutController);
+router.get("/me", authMiddleware, getCurrentUserController);
 
 export default router;

@@ -24,26 +24,26 @@ This migration introduces two shared classes (`ApiResponse`, `ApiError`) and a s
 > [!CAUTION]
 > All frontend or client code consuming this API must be updated for these changes.
 
-| Endpoint | What Changed | Frontend Impact |
-|---|---|---|
-| All success responses | Added `success: true` + `message` at root | Must read from `data` not root |
-| All error responses | New `{ success:false, error:{ code, message } }` shape | Must use `error.code` not `error` or `message` at root |
-| `GET /api/tickets/admin` | `tickets` → `data.items` | Update list rendering |
-| `GET /api/tickets/admin` | `pagination.totalTickets` → `data.pagination.totalItems` | Update pagination display |
-| `GET /api/tickets/admin` | Added `hasNextPage`, `hasPreviousPage` | Optional — enables next/prev buttons |
-| `GET /api/tickets/my-ticket` | `tickets` → `data.items` | Update list rendering |
-| `GET /api/tickets/assigned-to-me` | `tickets` → `data.items` | Update list rendering |
-| `GET /api/tickets/:id` | Bare ticket object → `data` envelope | Read `res.data` not `res` |
-| `PATCH /api/tickets/:id` | `ticket` → `data` | Read `res.data` not `res.ticket` |
-| `PATCH /api/tickets/:ticketId/assign` | `ticket` → `data` | Read `res.data` not `res.ticket` |
-| `DELETE /api/tickets/:id` | `ticketId` → `data.ticketId` | Read `res.data.ticketId` |
-| `POST /api/user/register` | `accessToken`, `user` → `data.accessToken`, `data.user` | Read from `data` |
-| `POST /api/user/login` | `accessToken`, `user` → `data.accessToken`, `data.user` | Read from `data` |
-| `POST /api/user/refresh` | `accessToken` → `data.accessToken` | Read from `data` |
-| `POST /api/admin/users` | `user` → `data` | Read from `data` |
-| `POST /api/tickets/:id/comments` | `comment` → `data` | Read from `data` |
-| `GET /api/tickets/:id/comments` | `comments` → `data.items` | Update list rendering |
-| `DELETE /api/tickets/:id/comments/:id` | `commentId` → `data.commentId` | Read `data.commentId` |
+| Endpoint                               | What Changed                                             | Frontend Impact                                        |
+| -------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------ |
+| All success responses                  | Added `success: true` + `message` at root                | Must read from `data` not root                         |
+| All error responses                    | New `{ success:false, error:{ code, message } }` shape   | Must use `error.code` not `error` or `message` at root |
+| `GET /api/tickets/admin`               | `tickets` → `data.items`                                 | Update list rendering                                  |
+| `GET /api/tickets/admin`               | `pagination.totalTickets` → `data.pagination.totalItems` | Update pagination display                              |
+| `GET /api/tickets/admin`               | Added `hasNextPage`, `hasPreviousPage`                   | Optional — enables next/prev buttons                   |
+| `GET /api/tickets/my-ticket`           | `tickets` → `data.items`                                 | Update list rendering                                  |
+| `GET /api/tickets/assigned-to-me`      | `tickets` → `data.items`                                 | Update list rendering                                  |
+| `GET /api/tickets/:id`                 | Bare ticket object → `data` envelope                     | Read `res.data` not `res`                              |
+| `PATCH /api/tickets/:id`               | `ticket` → `data`                                        | Read `res.data` not `res.ticket`                       |
+| `PATCH /api/tickets/:ticketId/assign`  | `ticket` → `data`                                        | Read `res.data` not `res.ticket`                       |
+| `DELETE /api/tickets/:id`              | `ticketId` → `data.ticketId`                             | Read `res.data.ticketId`                               |
+| `POST /api/user/register`              | `accessToken`, `user` → `data.accessToken`, `data.user`  | Read from `data`                                       |
+| `POST /api/user/login`                 | `accessToken`, `user` → `data.accessToken`, `data.user`  | Read from `data`                                       |
+| `POST /api/user/refresh`               | `accessToken` → `data.accessToken`                       | Read from `data`                                       |
+| `POST /api/admin/users`                | `user` → `data`                                          | Read from `data`                                       |
+| `POST /api/tickets/:id/comments`       | `comment` → `data`                                       | Read from `data`                                       |
+| `GET /api/tickets/:id/comments`        | `comments` → `data.items`                                | Update list rendering                                  |
+| `DELETE /api/tickets/:id/comments/:id` | `commentId` → `data.commentId`                           | Read `data.commentId`                                  |
 
 ---
 
@@ -53,14 +53,18 @@ This migration introduces two shared classes (`ApiResponse`, `ApiError`) and a s
 
 ```js
 // OLD
-const ticket = await fetch(`/api/tickets/${id}`, { headers }).then(r => r.json());
+const ticket = await fetch(`/api/tickets/${id}`, { headers }).then((r) =>
+  r.json(),
+);
 // ticket was the raw document: ticket.title, ticket.status, ...
 ```
 
 ```js
 // NEW
-const res = await fetch(`/api/tickets/${id}`, { headers }).then(r => r.json());
-const ticket = res.data;   // <-- always read from .data
+const res = await fetch(`/api/tickets/${id}`, { headers }).then((r) =>
+  r.json(),
+);
+const ticket = res.data; // <-- always read from .data
 // ticket.title, ticket.status, ...
 ```
 
@@ -70,17 +74,19 @@ const ticket = res.data;   // <-- always read from .data
 
 ```js
 // OLD
-const { tickets, pagination } = await fetch(`/api/tickets/admin`).then(r => r.json());
+const { tickets, pagination } = await fetch(`/api/tickets/admin`).then((r) =>
+  r.json(),
+);
 const total = pagination.totalTickets;
 ```
 
 ```js
 // NEW
-const res = await fetch(`/api/tickets/admin`).then(r => r.json());
-const tickets = res.data.items;          // <-- data.items
-const pagination = res.data.pagination;  // <-- data.pagination
-const total = pagination.totalItems;     // <-- totalItems (not totalTickets)
-const hasNext = pagination.hasNextPage;  // <-- new field
+const res = await fetch(`/api/tickets/admin`).then((r) => r.json());
+const tickets = res.data.items; // <-- data.items
+const pagination = res.data.pagination; // <-- data.pagination
+const total = pagination.totalItems; // <-- totalItems (not totalTickets)
+const hasNext = pagination.hasNextPage; // <-- new field
 ```
 
 ---
@@ -114,9 +120,9 @@ if (!res.ok) {
 // NEW — always error.code + error.message
 if (!res.ok) {
   const { error } = await res.json();
-  console.log(error.code);     // "TICKET_NOT_FOUND"
-  console.log(error.message);  // "Ticket not found or access denied"
-  console.log(error.details);  // only for VALIDATION_ERROR
+  console.log(error.code); // "TICKET_NOT_FOUND"
+  console.log(error.message); // "Ticket not found or access denied"
+  console.log(error.details); // only for VALIDATION_ERROR
 
   // Example: show user-friendly message based on code
   if (error.code === "TOKEN_EXPIRED") redirectToLogin();
@@ -128,17 +134,17 @@ if (!res.ok) {
 
 ## Removed Behaviors
 
-| Old Behavior | Replacement | Notes |
-|---|---|---|
-| `{ error: "..." }` at root for 4xx errors | `{ success: false, error: { code, message } }` | All controllers |
-| `{ message: "..." }` at root for 4xx errors | `{ success: false, error: { code, message } }` | Middlewares + controllers |
-| `{ message: "Internal server error" }` for 500 | `{ success: false, error: { code: "INTERNAL_ERROR", message: "Internal server error" } }` | Consistent 500 shape |
-| Bare ticket document at response root (`res.json(ticket)`) | `res.json(new ApiResponse(ticket, "..."))` | `getTicketDetailController` |
-| `totalTickets` in pagination | `totalItems` | `getAllTicketsController` |
-| `tickets` key in list responses | `data.items` | All list controllers |
-| `comments` key in list responses | `data.items` | Comment controller |
-| `ticket` key in update/assign responses | `data` | Ticket controller |
-| `comment` key in create response | `data` | Comment controller |
+| Old Behavior                                               | Replacement                                                                               | Notes                       |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------- | --------------------------- |
+| `{ error: "..." }` at root for 4xx errors                  | `{ success: false, error: { code, message } }`                                            | All controllers             |
+| `{ message: "..." }` at root for 4xx errors                | `{ success: false, error: { code, message } }`                                            | Middlewares + controllers   |
+| `{ message: "Internal server error" }` for 500             | `{ success: false, error: { code: "INTERNAL_ERROR", message: "Internal server error" } }` | Consistent 500 shape        |
+| Bare ticket document at response root (`res.json(ticket)`) | `res.json(new ApiResponse(ticket, "..."))`                                                | `getTicketDetailController` |
+| `totalTickets` in pagination                               | `totalItems`                                                                              | `getAllTicketsController`   |
+| `tickets` key in list responses                            | `data.items`                                                                              | All list controllers        |
+| `comments` key in list responses                           | `data.items`                                                                              | Comment controller          |
+| `ticket` key in update/assign responses                    | `data`                                                                                    | Ticket controller           |
+| `comment` key in create response                           | `data`                                                                                    | Comment controller          |
 
 ---
 
@@ -161,25 +167,25 @@ These fields no longer exist in any response. Remove them from frontend code:
 
 These endpoints are **not affected** by the migration:
 
-| Endpoint | Reason |
-|---|---|
-| `POST /api/user/logout` | 204 No Content — no body before or after |
-| `GET /api/health` | Documented exception — minimal health-check shape retained |
+| Endpoint                | Reason                                                     |
+| ----------------------- | ---------------------------------------------------------- |
+| `POST /api/user/logout` | 204 No Content — no body before or after                   |
+| `GET /api/health`       | Documented exception — minimal health-check shape retained |
 
 ---
 
 ## Affected Frontend Files
 
-The client directory is currently empty. When the frontend is implemented, the following files will need updating based on which endpoints they call:
+The client contains an unconnected Vite starter and placeholder role pages. Its current API call sites cover authentication only; ticket, comment, staff, dashboard, and notification workflows still need frontend integration:
 
-| Concern | Files to update |
-|---|---|
-| Auth (login, register, refresh) | Auth store, login page, auth interceptor |
-| Ticket lists | Ticket list page, admin dashboard |
-| Ticket detail | Ticket detail page |
-| Ticket mutations | Create/edit/delete ticket forms |
-| Comment list | Ticket detail page (comment section) |
-| Error handling | Global API error interceptor / toast handler |
+| Concern                         | Files to update                              |
+| ------------------------------- | -------------------------------------------- |
+| Auth (login, register, refresh) | Auth store, login page, auth interceptor     |
+| Ticket lists                    | Ticket list page, admin dashboard            |
+| Ticket detail                   | Ticket detail page                           |
+| Ticket mutations                | Create/edit/delete ticket forms              |
+| Comment list                    | Ticket detail page (comment section)         |
+| Error handling                  | Global API error interceptor / toast handler |
 
 ---
 

@@ -35,8 +35,29 @@ const notFoundMiddleware = (req, res, next) => {
  *   }
  */
 const errorMiddleware = (error, req, res, next) => {
-  // Always log full error server-side
-  console.error(error);
+  console.error("API request failed", {
+    method: req.method,
+    path: req.path,
+    statusCode: error.statusCode || error.status || 500,
+    code: error.code || "INTERNAL_ERROR",
+  });
+
+  if (error.type === "entity.too.large") {
+    return res.status(413).json({
+      success: false,
+      error: {
+        code: "PAYLOAD_TOO_LARGE",
+        message: "Request body is too large",
+      },
+    });
+  }
+
+  if (error instanceof SyntaxError && Object.hasOwn(error, "body")) {
+    return res.status(400).json({
+      success: false,
+      error: { code: "INVALID_JSON", message: "Malformed JSON request body" },
+    });
+  }
 
   if (error.isOperational) {
     // Known ApiError — safe to forward details to client
@@ -49,7 +70,16 @@ const errorMiddleware = (error, req, res, next) => {
     };
 
     if (error.details !== undefined) {
-      body.error.details = error.details;
+      body.error.details = Array.isArray(error.details)
+        ? error.details.map((detail) => {
+            const safeDetail = {};
+            for (const key of ["message", "path", "type", "field", "msg"]) {
+              if (detail[key] !== undefined) safeDetail[key] = detail[key];
+            }
+            return safeDetail;
+          })
+        : undefined;
+      if (body.error.details === undefined) delete body.error.details;
     }
 
     return res.status(error.statusCode).json(body);

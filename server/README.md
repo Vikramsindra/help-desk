@@ -36,7 +36,7 @@ curl -X PATCH http://localhost:8080/api/tickets/TICKET_ID/assign -H "Authorizati
 curl -i -X POST http://localhost:8080/api/user/logout
 ```
 
-Endpoints include `POST /api/tickets`, `GET /api/tickets/assigned-to-me`, `GET /api/tickets/admin`, `PATCH /api/tickets/:id`, and comments at `/api/tickets/:ticketId/comments`.
+Endpoints include `GET /api/user/me`, ticket CRUD and assignment, role-specific statistics at `GET /api/tickets/dashboard/stats`, comments at `/api/tickets/:ticketId/comments`, staff management at `/api/admin/users`, and user-scoped notifications at `/api/notifications`. See [docs/API_CONTRACT.md](docs/API_CONTRACT.md) for request, response, filter, and permission details.
 
 ## Development and tests
 
@@ -46,4 +46,4 @@ npm test
 npm start
 ```
 
-The application connects to MongoDB before listening. `GET /api/health` remains available. Integration tests should use an isolated MongoDB instance; this checkout currently has no MongoDB test dependency or existing test suite.
+The application connects to MongoDB before listening. `GET /api/health` remains available. The Jest integration suite uses `mongodb-memory-server`; its MongoDB binary must be downloadable or already cached. Run `npm test` from this directory. The API uses Helmet, a 32 KB JSON/urlencoded body limit, credentialed origin allow-listing, login/register/refresh rate limiting, and rejects Mongo-style operator keys in request input.

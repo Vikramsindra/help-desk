@@ -35,7 +35,7 @@ if (missing.length) {
       console.log("Super-admin created.");
     }
   } catch (error) {
-    console.error(`Super-admin seed failed: ${error.message}`);
+    console.error("Super-admin seed failed", { name: error.name });
     process.exitCode = 1;
   } finally {
     await mongoose.disconnect();

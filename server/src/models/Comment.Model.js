@@ -17,6 +17,10 @@ const commentSchema = mongoose.Schema(
       required: true,
       trim: true,
     },
+    isInternal: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true },
 );

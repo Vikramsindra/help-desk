@@ -93,13 +93,28 @@ describe("POST /api/user/refresh", () => {
     const regRes = await register();
     const cookie = regRes.headers["set-cookie"];
 
-    const res = await request
-      .post("/api/user/refresh")
-      .set("Cookie", cookie);
+    const res = await request.post("/api/user/refresh").set("Cookie", cookie);
 
     expect(res.status).toBe(200);
     assertApiResponseShape(res.body);
     expect(res.body.data).toHaveProperty("accessToken");
+  });
+
+  it("rotates refresh tokens and rejects reuse of the previous token", async () => {
+    const regRes = await register();
+    const originalCookie = regRes.headers["set-cookie"];
+
+    const refreshed = await request
+      .post("/api/user/refresh")
+      .set("Cookie", originalCookie);
+    const replay = await request
+      .post("/api/user/refresh")
+      .set("Cookie", originalCookie);
+
+    expect(refreshed.status).toBe(200);
+    expect(refreshed.headers["set-cookie"]).toBeDefined();
+    expect(replay.status).toBe(401);
+    expect(replay.body.error.code).toBe("REFRESH_TOKEN_INVALID");
   });
 
   it("returns 401 REFRESH_TOKEN_MISSING when no cookie is sent", async () => {
@@ -123,9 +138,7 @@ describe("POST /api/user/logout", () => {
 
     const cookie = loginRes.headers["set-cookie"];
 
-    const res = await request
-      .post("/api/user/logout")
-      .set("Cookie", cookie);
+    const res = await request.post("/api/user/logout").set("Cookie", cookie);
 
     expect(res.status).toBe(204);
     // 204 must have no body — text should be empty
@@ -141,16 +154,62 @@ describe("POST /api/user/logout", () => {
 
     const cookie = loginRes.headers["set-cookie"];
 
-    const res = await request
-      .post("/api/user/logout")
-      .set("Cookie", cookie);
+    const res = await request.post("/api/user/logout").set("Cookie", cookie);
 
     const setCookie = res.headers["set-cookie"] || [];
     // Cookie should be cleared (maxAge=0 or expires in past)
     const cleared = setCookie.some(
-      (c) => c.startsWith("refreshToken=") && (c.includes("Expires=Thu, 01 Jan 1970") || c.includes("Max-Age=0")),
+      (c) =>
+        c.startsWith("refreshToken=") &&
+        (c.includes("Expires=Thu, 01 Jan 1970") || c.includes("Max-Age=0")),
     );
     // Some implementations clear by sending empty value; just confirm status 204
     expect(res.status).toBe(204);
+  });
+
+  it("invalidates the refresh token on logout", async () => {
+    await register();
+    const loginRes = await request
+      .post("/api/user/login")
+      .send({ email: CREDENTIALS.email, password: CREDENTIALS.password });
+    const cookie = loginRes.headers["set-cookie"];
+
+    await request.post("/api/user/logout").set("Cookie", cookie);
+    const refreshed = await request
+      .post("/api/user/refresh")
+      .set("Cookie", cookie);
+
+    expect(refreshed.status).toBe(401);
+    expect(refreshed.body.error.code).toBe("REFRESH_TOKEN_INVALID");
+  });
+});
+
+describe("GET /api/user/me", () => {
+  it("returns the authenticated database user without sensitive fields", async () => {
+    const loginRes = await register();
+    const token = loginRes.body.data.accessToken;
+
+    const res = await request
+      .get("/api/user/me")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    assertApiResponseShape(res.body);
+    expect(res.body.data).toMatchObject({
+      name: CREDENTIALS.name,
+      email: CREDENTIALS.email,
+      role: "user",
+    });
+    expect(res.body.data).toHaveProperty("id");
+    expect(res.body.data).toHaveProperty("createdAt");
+    expect(res.body.data).not.toHaveProperty("password");
+    expect(res.body.data).not.toHaveProperty("refreshTokenHash");
+  });
+
+  it("requires a valid access token", async () => {
+    const res = await request.get("/api/user/me");
+
+    expect(res.status).toBe(401);
+    assertErrorShape(res.body);
   });
 });

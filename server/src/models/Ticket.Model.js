@@ -36,12 +36,17 @@ const ticketSchema = mongoose.Schema(
       ref: "user",
       default: null,
     },
+    assignedAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true },
 );
 
 ticketSchema.index({ createdBy: 1 });
 ticketSchema.index({ assignedTo: 1 });
+ticketSchema.index({ assignedTo: 1, assignedAt: -1 });
 ticketSchema.index({ status: 1 });
 ticketSchema.index({ priority: 1 });
 ticketSchema.index({ createdAt: -1 });
