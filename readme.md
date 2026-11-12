@@ -74,6 +74,10 @@ docker compose down
 
 The frontend waits until the backend health check succeeds. The backend health check calls `/api/health`; the server only begins listening after MongoDB connects. No local MongoDB container is started.
 
+## Continuous integration
+
+GitHub Actions runs CI for pushes to `main` and pull requests targeting `main`. It uses Node.js 22, installs each app's locked dependencies with `npm ci`, runs frontend lint and build, and runs the full backend Jest suite plus a Node.js syntax check. The repository does not currently define a frontend test script or backend lint script, so CI does not report either as a passing check.
+
 ## Demo Data and Credentials
 
 The demo seed creates one account for each role and five sample tickets owned by the demo customer. It is idempotent and only creates missing records. It does not change existing passwords. It refuses to run unless explicitly enabled.
