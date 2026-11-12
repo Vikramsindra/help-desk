@@ -17,6 +17,7 @@ import {
 } from "./middlewares/error.Middleware.js";
 
 const app = express();
+app.set("trust proxy", 1);
 app.use(helmet());
 
 const allowedOrigins = (process.env.FRONTEND_ORIGINS || "http://localhost:5173")

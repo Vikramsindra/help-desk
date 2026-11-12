@@ -34,7 +34,7 @@ npm install
 Copy-Item .env.example .env
 ```
 
-Edit `server/.env` and set `MONGO_URI`, `JWT_ACCESS_SECRET`, and `JWT_REFRESH_SECRET`. Keep this file private and never commit it. The default API port is `8080`; `FRONTEND_ORIGINS` should include the frontend origin, normally `http://localhost:5173`.
+Edit `server/.env` and set `MONGO_URI`, `JWT_ACCESS_SECRET`, and `JWT_REFRESH_SECRET`. Keep this file private and never commit it. The default API port is `8080`; for direct API access during Vite development, `FRONTEND_ORIGINS` should include the frontend origin, normally `http://localhost:5173`. Docker Compose proxies same-origin frontend requests and Socket.IO through Nginx.
 
 Start the API:
 
@@ -55,6 +55,24 @@ npm run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173). Vite proxies `/api` and `/socket.io` to `http://localhost:8080` by default. To use another backend address, set `VITE_API_PROXY_TARGET` in a client environment file.
+
+## Run with Docker Compose
+
+Create and populate `server/.env` with the Atlas `MONGO_URI`, JWT secrets, and frontend origin as described above. Compose passes this file only to the backend at runtime; it is excluded from Git and both image build contexts. The frontend is available at `http://localhost:8081` and proxies API and Socket.IO traffic to the backend on the private Compose network. Nginx runs as an unprivileged user on container port `8080`. The backend is also published on `http://localhost:8080` for local checks.
+
+From the repository root in PowerShell:
+
+```powershell
+docker compose config --quiet
+docker compose build
+docker compose up --detach
+docker compose ps
+Invoke-RestMethod http://localhost:8080/api/health
+Invoke-WebRequest -UseBasicParsing http://localhost:8081/ | Select-Object StatusCode
+docker compose down
+```
+
+The frontend waits until the backend health check succeeds. The backend health check calls `/api/health`; the server only begins listening after MongoDB connects. No local MongoDB container is started.
 
 ## Demo Data and Credentials
 

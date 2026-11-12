@@ -17,6 +17,22 @@
 
 Copy `.env.example` to `.env` and set `MONGO_URI`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, and `FRONTEND_ORIGINS`. `COOKIE_SAME_SITE` defaults to `lax`; use `none` only when HTTPS and cross-site cookies are required.
 
+## Docker
+
+Build the backend image from this directory. The image uses Node.js 22, installs the locked production dependencies, and listens on port `8080`. It does not contain `.env`; provide runtime configuration through an environment file or `docker run -e` options. `MONGO_URI` is required for startup. Set `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` for authenticated routes, and set `FRONTEND_ORIGINS` to the browser application's origin.
+
+In PowerShell, after creating and filling in the private `.env` file:
+
+```powershell
+docker build -f .\dockerfile -t help-desk-backend:local .
+docker run --detach --name help-desk-backend -p 8080:8080 --env-file .\.env --env NODE_ENV=production help-desk-backend:local
+Invoke-RestMethod http://localhost:8080/api/health
+docker exec help-desk-backend node -e "fetch('http://127.0.0.1:8080/api/health').then((r) => { console.log(r.status); process.exit(r.ok ? 0 : 1); }).catch(() => process.exit(1))"
+docker inspect --format='{{.State.Health.Status}}' help-desk-backend
+```
+
+The health endpoint responds after the server successfully connects to MongoDB. Socket.IO uses the same published port.
+
 ## Bootstrap
 
 Set `SUPER_ADMIN_NAME`, `SUPER_ADMIN_EMAIL`, and `SUPER_ADMIN_PASSWORD`, then run:

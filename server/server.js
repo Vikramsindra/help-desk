@@ -14,8 +14,8 @@ async function startServer() {
     await connectToDB();
     const httpServer = http.createServer(app);
     configureSocket(httpServer, allowedOrigins);
-    httpServer.listen(PORT, () => {
-      console.log(`Server is Running on ${PORT}`);
+    httpServer.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server is Running on 0.0.0.0:${PORT}`);
     });
   } catch (error) {
     console.error("Server startup failed", { name: error.name });

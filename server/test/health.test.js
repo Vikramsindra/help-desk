@@ -5,6 +5,10 @@ import { app } from "../src/app.js";
 const request = supertest(app);
 
 describe("GET /api/health", () => {
+  it("trusts exactly one reverse proxy hop", () => {
+    expect(app.get("trust proxy")).toBe(1);
+  });
+
   it("returns 200 with status ok", async () => {
     const res = await request.get("/api/health");
     expect(res.status).toBe(200);
