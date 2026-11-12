@@ -1,0 +1,375 @@
+name: Deploy Help Desk
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build, publish, and deploy
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    env:
+      ACR_NAME: ${{ vars.ACR_NAME }}
+      ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      BACKEND_CONTAINER_APP: ${{ vars.BACKEND_CONTAINER_APP }}
+      FRONTEND_CONTAINER_APP: ${{ vars.FRONTEND_CONTAINER_APP }}
+      FRONTEND_URL: ${{ vars.FRONTEND_URL }}
+      IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+
+    steps:
+      - name: Check out the commit that passed CI
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Validate deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID \
+            ACR_NAME ACR_LOGIN_SERVER AZURE_RESOURCE_GROUP \
+            BACKEND_CONTAINER_APP FRONTEND_CONTAINER_APP FRONTEND_URL; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Required GitHub repository variable $name is not configured."
+              exit 1
+            fi
+          done
+          if [[ "$FRONTEND_URL" != https://* ]]; then
+            echo "::error::FRONTEND_URL must use HTTPS."
+            exit 1
+          fi
+          if [[ "$ACR_LOGIN_SERVER" != "$ACR_NAME.azurecr.io" ]]; then
+            echo "::error::ACR_LOGIN_SERVER must match ACR_NAME.azurecr.io."
+            exit 1
+          fi
+          if [[ ! "$IMAGE_TAG" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The triggering CI run did not provide a full commit SHA."
+            exit 1
+          fi
+
+      - name: Authenticate to Azure with GitHub OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate Docker to ACR
+        shell: bash
+        run: az acr login --name "$ACR_NAME"
+
+      - name: Build and push backend image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="help-desk-backend:$IMAGE_TAG"
+          if existing="$(az acr repository show \
+            --name "$ACR_NAME" \
+            --image "$image" \
+            --output json 2>/dev/null)"; then
+            write_enabled="$(jq -r '.changeableAttributes.writeEnabled' <<< "$existing")"
+            if [[ "$write_enabled" != "false" ]]; then
+              echo "::error::Existing backend SHA tag is not write-protected; refusing to overwrite it."
+              exit 1
+            fi
+            echo "Reusing the already write-protected backend SHA tag."
+            exit 0
+          fi
+          docker buildx build \
+            --platform linux/amd64 \
+            --file server/dockerfile \
+            --tag "$ACR_LOGIN_SERVER/$image" \
+            --push \
+            server
+          az acr repository update \
+            --name "$ACR_NAME" \
+            --image "$image" \
+            --write-enabled false \
+            --output none
+
+      - name: Build and push frontend image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="help-desk-frontend:$IMAGE_TAG"
+          if existing="$(az acr repository show \
+            --name "$ACR_NAME" \
+            --image "$image" \
+            --output json 2>/dev/null)"; then
+            write_enabled="$(jq -r '.changeableAttributes.writeEnabled' <<< "$existing")"
+            if [[ "$write_enabled" != "false" ]]; then
+              echo "::error::Existing frontend SHA tag is not write-protected; refusing to overwrite it."
+              exit 1
+            fi
+            echo "Reusing the already write-protected frontend SHA tag."
+            exit 0
+          fi
+          docker buildx build \
+            --platform linux/amd64 \
+            --file client/dockerfile \
+            --tag "$ACR_LOGIN_SERVER/$image" \
+            --push \
+            client
+          az acr repository update \
+            --name "$ACR_NAME" \
+            --image "$image" \
+            --write-enabled false \
+            --output none
+
+      - name: Record current images for rollback
+        id: previous
+        shell: bash
+        run: |
+          set -euo pipefail
+          backend_image="$(az containerapp show \
+            --name "$BACKEND_CONTAINER_APP" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query 'properties.template.containers[0].image' \
+            --output tsv)"
+          frontend_image="$(az containerapp show \
+            --name "$FRONTEND_CONTAINER_APP" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query 'properties.template.containers[0].image' \
+            --output tsv)"
+          if [[ -z "$backend_image" || -z "$frontend_image" ]]; then
+            echo "::error::Could not identify both currently deployed images; refusing deployment."
+            exit 1
+          fi
+          {
+            echo "backend_image=$backend_image"
+            echo "frontend_image=$frontend_image"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Deploy backend revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          suffix="sha-${IMAGE_TAG:0:7}-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          az containerapp update \
+            --name "$BACKEND_CONTAINER_APP" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --image "$ACR_LOGIN_SERVER/help-desk-backend:$IMAGE_TAG" \
+            --revision-suffix "$suffix" \
+            --output none
+
+          deployed_image="$(az containerapp show \
+            --name "$BACKEND_CONTAINER_APP" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query 'properties.template.containers[0].image' \
+            --output tsv)"
+          if [[ "$deployed_image" != "$ACR_LOGIN_SERVER/help-desk-backend:$IMAGE_TAG" ]]; then
+            echo "::error::Backend Container App is not configured with the requested commit image."
+            exit 1
+          fi
+
+          for attempt in $(seq 1 60); do
+            ready_revision="$(az containerapp show \
+              --name "$BACKEND_CONTAINER_APP" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query properties.latestReadyRevisionName \
+              --output tsv)"
+            latest_revision="$(az containerapp show \
+              --name "$BACKEND_CONTAINER_APP" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query properties.latestRevisionName \
+              --output tsv)"
+            if [[ -n "$ready_revision" && "$ready_revision" == "$latest_revision" ]]; then
+              break
+            fi
+            if [[ "$attempt" -eq 60 ]]; then
+              echo "::error::Backend revision did not become ready in time."
+              exit 1
+            fi
+            sleep 10
+          done
+
+          for attempt in $(seq 1 30); do
+            if response="$(curl --silent --show-error --fail \
+              "$FRONTEND_URL/api/health" 2>/dev/null)" &&
+              [[ "$response" == *'"status":"ok"'* ]]; then
+              exit 0
+            fi
+            if [[ "$attempt" -eq 30 ]]; then
+              echo "::error::Backend health check through the frontend proxy failed."
+              exit 1
+            fi
+            sleep 5
+          done
+
+      - name: Deploy frontend revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          suffix="sha-${IMAGE_TAG:0:7}-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          az containerapp update \
+            --name "$FRONTEND_CONTAINER_APP" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --image "$ACR_LOGIN_SERVER/help-desk-frontend:$IMAGE_TAG" \
+            --revision-suffix "$suffix" \
+            --output none
+
+          deployed_image="$(az containerapp show \
+            --name "$FRONTEND_CONTAINER_APP" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query 'properties.template.containers[0].image' \
+            --output tsv)"
+          if [[ "$deployed_image" != "$ACR_LOGIN_SERVER/help-desk-frontend:$IMAGE_TAG" ]]; then
+            echo "::error::Frontend Container App is not configured with the requested commit image."
+            exit 1
+          fi
+
+          for attempt in $(seq 1 60); do
+            ready_revision="$(az containerapp show \
+              --name "$FRONTEND_CONTAINER_APP" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query properties.latestReadyRevisionName \
+              --output tsv)"
+            latest_revision="$(az containerapp show \
+              --name "$FRONTEND_CONTAINER_APP" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query properties.latestRevisionName \
+              --output tsv)"
+            if [[ -n "$ready_revision" && "$ready_revision" == "$latest_revision" ]]; then
+              break
+            fi
+            if [[ "$attempt" -eq 60 ]]; then
+              echo "::error::Frontend revision did not become ready in time."
+              exit 1
+            fi
+            sleep 10
+          done
+
+      - name: Verify public frontend, API, and Socket.IO
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if curl --silent --show-error --fail "$FRONTEND_URL/" -o /dev/null &&
+              curl --silent --show-error --fail \
+                "$FRONTEND_URL/customer/dashboard" -o /dev/null &&
+              response="$(curl --silent --show-error --fail \
+                "$FRONTEND_URL/api/health" 2>/dev/null)" &&
+              [[ "$response" == *'"status":"ok"'* ]] &&
+              handshake="$(curl --silent --show-error --fail \
+                "$FRONTEND_URL/socket.io/?EIO=4&transport=polling" 2>/dev/null)" &&
+              [[ "$handshake" == 0\{* ]]; then
+              echo "Frontend, direct React route, backend health, and Socket.IO polling handshake passed."
+              exit 0
+            fi
+            if [[ "$attempt" -eq 30 ]]; then
+              echo "::error::One or more post-deployment smoke checks failed."
+              exit 1
+            fi
+            sleep 5
+          done
+
+      - name: Restore previous frontend image on failure
+        if: failure() && steps.previous.outputs.frontend_image != ''
+        shell: bash
+        env:
+          PREVIOUS_IMAGE: ${{ steps.previous.outputs.frontend_image }}
+        run: |
+          set -euo pipefail
+          current_image="$(az containerapp show \
+            --name "$FRONTEND_CONTAINER_APP" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query 'properties.template.containers[0].image' \
+            --output tsv)"
+          if [[ "$current_image" != "$PREVIOUS_IMAGE" ]]; then
+            suffix="rollback-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+            az containerapp update \
+              --name "$FRONTEND_CONTAINER_APP" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --image "$PREVIOUS_IMAGE" \
+              --revision-suffix "$suffix" \
+              --output none
+            for attempt in $(seq 1 60); do
+              ready_revision="$(az containerapp show \
+                --name "$FRONTEND_CONTAINER_APP" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --query properties.latestReadyRevisionName \
+                --output tsv)"
+              latest_revision="$(az containerapp show \
+                --name "$FRONTEND_CONTAINER_APP" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --query properties.latestRevisionName \
+                --output tsv)"
+              if [[ -n "$ready_revision" && "$ready_revision" == "$latest_revision" ]]; then
+                break
+              fi
+              if [[ "$attempt" -eq 60 ]]; then
+                echo "::error::Frontend rollback revision did not become ready."
+                exit 1
+              fi
+              sleep 10
+            done
+            echo "Restored the frontend's previous image in a new revision."
+          fi
+
+      - name: Restore previous backend image on failure
+        if: failure() && steps.previous.outputs.backend_image != ''
+        shell: bash
+        env:
+          PREVIOUS_IMAGE: ${{ steps.previous.outputs.backend_image }}
+        run: |
+          set -euo pipefail
+          current_image="$(az containerapp show \
+            --name "$BACKEND_CONTAINER_APP" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query 'properties.template.containers[0].image' \
+            --output tsv)"
+          if [[ "$current_image" != "$PREVIOUS_IMAGE" ]]; then
+            suffix="rollback-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+            az containerapp update \
+              --name "$BACKEND_CONTAINER_APP" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --image "$PREVIOUS_IMAGE" \
+              --revision-suffix "$suffix" \
+              --output none
+            for attempt in $(seq 1 60); do
+              ready_revision="$(az containerapp show \
+                --name "$BACKEND_CONTAINER_APP" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --query properties.latestReadyRevisionName \
+                --output tsv)"
+              latest_revision="$(az containerapp show \
+                --name "$BACKEND_CONTAINER_APP" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --query properties.latestRevisionName \
+                --output tsv)"
+              if [[ -n "$ready_revision" && "$ready_revision" == "$latest_revision" ]]; then
+                break
+              fi
+              if [[ "$attempt" -eq 60 ]]; then
+                echo "::error::Backend rollback revision did not become ready."
+                exit 1
+              fi
+              sleep 10
+            done
+            echo "Restored the backend's previous image in a new revision."
+          fi

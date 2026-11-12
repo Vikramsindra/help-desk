@@ -18,6 +18,10 @@ A full-stack help desk application for submitting and managing support tickets. 
 - Backend: Node.js, Express, Mongoose, MongoDB, Socket.IO
 - Tests: Jest, Supertest, and `mongodb-memory-server`
 
+## College evaluation
+
+See the [college mini-project evaluation guide](docs/college-mini-project-evaluation.md) for architecture diagrams, setup and demonstration steps, viva questions, test evidence, deployment details, and known limitations.
+
 ## Requirements
 
 - Node.js 20.19+ (or 22.12+)
