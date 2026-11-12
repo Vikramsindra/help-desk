@@ -150,11 +150,14 @@ export default function AgentTicketPage() {
         trimmedMessage,
         isInternal,
       );
-      setCommentState((current) =>
-        current.ticketId === ticketId
-          ? { ...current, items: [...current.items, response.data] }
-          : current,
-      );
+      setCommentState((current) => {
+        if (
+          current.ticketId !== ticketId ||
+          current.items.some((item) => item._id === response.data._id)
+        )
+          return current;
+        return { ...current, items: [...current.items, response.data] };
+      });
       setMessage("");
       setIsInternal(false);
       toast.success(

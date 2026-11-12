@@ -29,6 +29,9 @@ jobs:
     timeout-minutes: 45
     environment: production
     env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       ACR_NAME: ${{ vars.ACR_NAME }}
       ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
       AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -48,10 +51,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID \
-            ACR_NAME ACR_LOGIN_SERVER AZURE_RESOURCE_GROUP \
-            BACKEND_CONTAINER_APP FRONTEND_CONTAINER_APP FRONTEND_URL; do
-            if [[ -z "${!name}" ]]; then
+          required_variables=(
+            AZURE_CLIENT_ID
+            AZURE_TENANT_ID
+            AZURE_SUBSCRIPTION_ID
+            ACR_NAME
+            ACR_LOGIN_SERVER
+            AZURE_RESOURCE_GROUP
+            BACKEND_CONTAINER_APP
+            FRONTEND_CONTAINER_APP
+            FRONTEND_URL
+          )
+          for name in "${required_variables[@]}"; do
+            if [[ -z "$(printenv "$name")" ]]; then
               echo "::error::Required GitHub repository variable $name is not configured."
               exit 1
             fi
